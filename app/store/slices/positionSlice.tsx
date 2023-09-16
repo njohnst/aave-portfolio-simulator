@@ -1,4 +1,4 @@
-import { PayloadAction, createSlice, createSelector } from '@reduxjs/toolkit';
+import { PayloadAction, createSlice } from '@reduxjs/toolkit';
 import { RootState } from '..';
 import { SimulationResults } from '../services/simulation/simulator';
 import { ReservesData } from '../services/web3/fetchAaveV3Data';
@@ -87,26 +87,6 @@ export const selectLeverage = (state: RootState) => state.position.leverage;
 export const selectInitialInvestment = (state: RootState) => state.position.initialInvestmentUSD;
 export const selectSimulationResults = (state: RootState) => state.position.simulationResults;
 
-export const makeSelectReserves = createSelector(
-    [selectMarket],
-    (marketKey) => {
-        return getSelectReserves(marketKey);
-    },
-    {
-        memoizeOptions: {
-            maxSize: 10, //10 should cover all of Aave markets
-        },
-    }
-);
-
-//unsafe because it relies on the API being called already;
-//i.e. this will never return any data if there is no subscription to the API for the given marketKey
-export const selectReservesUnsafe = (state: RootState) => {
-    //note that makeSelectReserves(state) returns a selector
-    //so we need to curry with state twice, first time gets the selector, second time calls it
-    //makeSelectReserves is memoized for performance
-    return makeSelectReserves(state)(state);
-};
 
 export const selectPositionBySymbol = (state: RootState, symbol: string) => {
     return state.position.positions[symbol]; //could be undefined!
@@ -120,38 +100,5 @@ export const selectBorrowPctBySymbol = (state: RootState, symbol: string) => {
     return state.position.positions[symbol]?.borrowPct ?? 0;
 };
 
-
-export const selectMaxLtv = createSelector([selectPositions, selectMarket, selectReservesUnsafe],(positions, _market, reserves) => {
-    if (reserves.isUninitialized) {
-        return 0;
-    }
-
-    const totals = Object.keys(positions).reduce((totals, symbol: string) => {
-        const position = positions[symbol];
-        const asset = reserves.data?.[symbol];
-
-        totals.totalLtv += Number(asset?.formattedBaseLTVasCollateral ?? 0) * position.supplyPct;
-        totals.totalSupplyFactor += position.supplyPct;
-        
-        return totals;
-    }, { totalLtv: 0, totalSupplyFactor: 0, });
-
-    return totals.totalLtv / totals.totalSupplyFactor;
-});
-
-export const selectMaxLeverage = createSelector([selectMaxLtv], (maxLtv) => {
-    return Number((Math.floor(10 * (1 / (1 - maxLtv)))/10).toFixed(1)); //infinite sum theoretical maximum is (1/(1-r)); doing some truncating trick to get 1 decimal place
-});
-
-export const selectCurrentLtv = createSelector([selectLeverage, selectMaxLtv], (leverage, maxLtv) => {
-    //Compute borrow amount (after looping)
-    const borrowAmount = leverage * maxLtv;
-
-    //Borrow amount is looped, it is a percentage which is then redeposited, reborrowed, redeposited in an infinite sum up to the max LTV
-    //This results in net position of {Supply: 1+borrowAmount, Borrow: borrowAmount}
-
-    //Thus we compute currentLtv as borrows/deposits = borrow/(1+borrow)
-    return borrowAmount/(1+borrowAmount);
-});
 
 export default positionSlice.reducer;

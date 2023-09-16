@@ -1,4 +1,3 @@
-import { createSelector } from "@reduxjs/toolkit";
 import { FetchBaseQueryError, createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react"
 
 const BASE_URL = "https://api.coingecko.com/api/v3/coins";
