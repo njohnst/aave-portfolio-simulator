@@ -5,8 +5,10 @@ import V3_MARKETS_LIST from '@/app/store/services/utils/v3Markets';
 import React from 'react';
 
 import { useAppDispatch, useAppSelector } from '../hooks';
-import { selectMarket, selectMaxLeverage, selectMaxLtv, selectLeverage, setLeverage, selectCurrentLtv, selectInitialInvestment, setInitialInvestment, selectPositions, selectReservesUnsafe } from "@/app/store/slices/positionSlice";
+import { selectMarket, selectLeverage, setLeverage, selectInitialInvestment, setInitialInvestment, selectPositions, ReserveMap } from "@/app/store/slices/positionSlice";
 import { useLazyGetSimulationResultQuery } from '../store/services/simulatorApi';
+import { useGetAaveContractDataQuery } from '../store/services/aaveApi';
+import { calculateCurrentLtv, calculateMaxLeverage, calculateMaxLtv } from '../store/slices/utils/calculations';
 
 const LEVERAGE_STEP_SIZE = 0.01;
 
@@ -15,23 +17,17 @@ export default function MarketToolbar() {
 
   const marketKey = useAppSelector(selectMarket);
   const leverage = useAppSelector(selectLeverage);
-  const maxLeverage = useAppSelector(selectMaxLeverage);
-  const maxLtv = useAppSelector(selectMaxLtv);
-
-  const currentLtv = useAppSelector(selectCurrentLtv);
   const initialInvestment = useAppSelector(selectInitialInvestment);
 
-  const positions = useAppSelector(selectPositions);
-  
-  const reserves = useAppSelector(selectReservesUnsafe); //@TODO!
+  const reservesData = useGetAaveContractDataQuery(marketKey);
+  const reservesMap = reservesData?.data;
+  const positionMap = useAppSelector(selectPositions);
 
+  const maxLtv = calculateMaxLtv(positionMap, reservesMap as ReserveMap);
+  const maxLeverage = calculateMaxLeverage(maxLtv);
+  const currentLtv = calculateCurrentLtv(leverage, maxLtv);
   
-  //     aprs,
-  //     prices,
-  // };
-
   
-
   const [lazySimTrigger, lazySimResults] = useLazyGetSimulationResultQuery();
   
   return (
@@ -99,7 +95,7 @@ export default function MarketToolbar() {
         <Grid item xs={4}>
           {/* TODO HACK */}
           <Button
-            onClick={()=>lazySimTrigger(null)}
+            onClick={()=>lazySimTrigger({ marketKey, initialInvestment, maxLtv, leverage, positionMap, reservesMap, })}
           >
             RUN
           </Button>

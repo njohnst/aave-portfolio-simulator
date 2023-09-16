@@ -1,8 +1,7 @@
 import { PayloadAction, createSlice, createSelector } from '@reduxjs/toolkit';
-import { RootState, store } from '..';
+import { RootState } from '..';
 import { SimulationResults } from '../services/simulation/simulator';
 import { ReservesData } from '../services/web3/fetchAaveV3Data';
-import { aaveApi, getSelectReserves } from '../services/aaveApi';
 
 const DEFAULT_MARKET : string = "polygonV3";
 
@@ -109,22 +108,18 @@ export const selectReservesUnsafe = (state: RootState) => {
     return makeSelectReserves(state)(state);
 };
 
-//@TODO THESE BELOW ARE FACTORIES - NOT BEING USED CORRECTLY CURRENTLY
-export const selectReserveBySymbol = (symbol: string) => createSelector([selectReservesUnsafe], (reserves) => {
-    return reserves.data?.[symbol]; //could be undefined!
-}); 
+export const selectPositionBySymbol = (state: RootState, symbol: string) => {
+    return state.position.positions[symbol]; //could be undefined!
+}; 
 
-export const selectPositionBySymbol = (symbol: string) => createSelector([selectPositions], (positions) => {
-    return positions[symbol]; //could be undefined!
-}); 
+export const selectSupplyPctBySymbol = (state: RootState, symbol: string) => {
+    return state.position.positions[symbol]?.supplyPct ?? 0;
+};
 
-export const selectSupplyPctBySymbol = (symbol: string) => createSelector([selectPositionBySymbol(symbol)], (position) => {
-    return position?.supplyPct ?? 0;
-});
+export const selectBorrowPctBySymbol = (state: RootState, symbol: string) => {
+    return state.position.positions[symbol]?.borrowPct ?? 0;
+};
 
-export const selectBorrowPctBySymbol = (symbol: string) => createSelector([selectPositionBySymbol(symbol)], (position) => {
-    return position?.borrowPct ?? 0;
-});
 
 export const selectMaxLtv = createSelector([selectPositions, selectMarket, selectReservesUnsafe],(positions, _market, reserves) => {
     if (reserves.isUninitialized) {

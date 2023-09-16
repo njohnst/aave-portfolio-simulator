@@ -1,8 +1,6 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react"
 import V3_MARKETS_LIST from "./utils/v3Markets";
 import { aaveFetchContractData } from "./web3/fetchAaveV3Data";
-import memoize from "lodash";
-import { RootState, store } from "..";
 
 const BASE_URL = "https://aave-api-v2.aave.com/data";
 const HISTORY_ENDPOINT = "/rates-history";
@@ -52,7 +50,5 @@ export const aaveApi = createApi({
         })
     }),
 });
-
-export const getSelectReserves = (marketKey:string) => aaveApi.endpoints.getAaveContractData.select(marketKey);
 
 export const useGetAaveContractDataQuery = aaveApi.useGetAaveContractDataQuery;

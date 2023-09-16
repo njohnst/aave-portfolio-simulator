@@ -6,7 +6,7 @@ import { AssetHistoryResponse, CGPriceQuery, coingeckoApi } from "./coingeckoApi
 import { simulationWorkers } from "./simulation/workerPool";
 import { AprData, SimulationArgs, doSimulate } from "./simulation/simulator";
 import { RootState } from "..";
-import { ReserveMap, selectInitialInvestment, selectLeverage, selectMarket, selectMaxLtv, selectPositions } from "../slices/positionSlice";
+import { ReserveMap } from "../slices/positionSlice";
 import { ThunkDispatch } from "@reduxjs/toolkit";
 
 
@@ -87,25 +87,13 @@ export const simulatorApi = createApi({
     baseQuery: simulatorBaseQuery,
     endpoints: (builder) => ({
         getSimulationResult: builder.query({
-            queryFn: async (_, { dispatch, getState }, _options, runSimulationQuery) => {
+            queryFn: async ({ marketKey, initialInvestment, maxLtv, leverage, positionMap, reservesMap, }, { dispatch, getState }, _options, runSimulationQuery) => {
                 const state = getState() as RootState;
 
-                const marketKey = selectMarket(state);
-
                 try {
-                    //get our positions
-                    const positionMap = selectPositions(state);
-
-                    //get the reserves
-                    const _sub = dispatch(aaveApi.endpoints.getAaveContractData.initiate(marketKey));
-                    const reservesMap = (await _sub).data;
-                    if (!reservesMap) { throw new Error("no reserves data"); }
-                    _sub.unsubscribe();
-
                     //get the list of coingecko tokens
                     const cgLut = await apiSubscriptionShim.getCGList(state, dispatch);
-
-
+                
                     const {prices, aprs} = (await Promise.all(Object.keys(positionMap).map(async symbol => {
                         const reserve = reservesMap[symbol];
                 
@@ -128,9 +116,9 @@ export const simulatorApi = createApi({
                     }, {prices: {}, aprs: {}} as { prices: {[k: string]: AssetHistoryResponse}, aprs: {[k: string]: AprData[]} });
 
                     const args: SimulationArgs = {
-                        initialInvestment: selectInitialInvestment(state),
-                        maxLtv: selectMaxLtv(state),
-                        leverage: selectLeverage(state),
+                        initialInvestment,
+                        maxLtv,
+                        leverage,
                         positions: positionMap,
                         reserves: reservesMap as ReserveMap,
                         aprs,
