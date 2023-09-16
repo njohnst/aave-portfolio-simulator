@@ -3,11 +3,12 @@
 import { DataGrid, GridColDef, GridRowsProp } from '@mui/x-data-grid';
 import React from "react";
 import { useAppDispatch, useAppSelector } from './hooks';
-import { fetchMarketData, selectReserves, selectMarket } from "@/app/store/slices/positionSlice";
+import { selectMarket } from "@/app/store/slices/positionSlice";
 import MarketToolbar from "@/app/components/MarketToolbar";
 import AllocationSlider from './components/AllocationSlider';
 import AnnouncementIcon from '@mui/icons-material/Announcement';
 import { Tooltip } from '@mui/material';
+import { useGetAaveContractDataQuery } from './store/services/aaveApi';
 
 const formatPercentage = (n: number, decimalPlaces: number) => parseFloat((n*100).toFixed(decimalPlaces))+"%";
 
@@ -20,7 +21,7 @@ const cols : GridColDef[] = [
       const isCollateral = params.row["usageAsCollateralEnabled"];
 
       /** it either can't be borrowed, or can't be collateral; if it is both then asset won't be displayed on list */
-      const title = "Can't be borrowed";//!canBorrow ? "Can't be borrowed" : "Can't be used as collateral";
+      const title = !canBorrow ? "Can't be borrowed" : "Can't be used as collateral";
 
       return !canBorrow || !isCollateral
       ? <Tooltip title={title}>
@@ -45,19 +46,12 @@ const cols : GridColDef[] = [
 ];
 
 export default function IndexPage() {
-  const dispatch = useAppDispatch();
-
   const marketKey = useAppSelector(selectMarket);
-  const reserves = useAppSelector(selectReserves);
-
-  React.useEffect(() => {
-    //fetch on page load
-    dispatch(fetchMarketData(marketKey));
-  }, []);
+  const reservesResult = useGetAaveContractDataQuery(marketKey);
 
   return <>
     <DataGrid
-      rows={reserves || []}
+      rows={reservesResult.isSuccess ? Object.values(reservesResult.data) : []}
       columns={cols}
       slots={{
         toolbar: MarketToolbar

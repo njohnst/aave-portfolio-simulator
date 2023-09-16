@@ -15,7 +15,7 @@ export default function AllocationSlider(props: {symbol: string}) {
     const borrowPct = useAppSelector(selectBorrowPctBySymbol(symbol));
 
     return (
-        <Grid container xs={12} spacing={2}>
+        <Grid container spacing={2}>
             <Grid item xs={6}>
                 <Stack>
                     <Typography>Supply</Typography>

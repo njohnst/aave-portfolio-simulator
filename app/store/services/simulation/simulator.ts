@@ -1,6 +1,5 @@
-import { ReservesData } from "@/app/utils/fetchAaveV3Data";
-import { PositionMap } from "./positionSlice";
-import { AssetHistoryResponse } from "@/app/utils/fetchCoinGeckoHistory";
+import { PositionMap, ReserveMap } from "../../slices/positionSlice";
+import { AssetHistoryResponse } from "@/app/store/services/coingeckoApi";
 
 const SECONDS_IN_A_YEAR = 31536000; //For the purpose of getting rates per second
 //Aave is compounded per second according to: https://docs.aave.com/developers/v/2.0/guides/apy-and-apr
@@ -26,14 +25,13 @@ export type AprData = {
 };
 
 export type SimulationArgs = {
-    duration: number,
     initialInvestment: number,
     maxLtv: number,
     leverage: number,
     positions: PositionMap,
-    reserves: Array<ReservesData>,
+    reserves: ReserveMap,
     aprs: { [symbol: string] : Array<AprData>, },
-    prices: { [symbol : string] : AssetHistoryResponse,}, //@@TODO
+    prices: { [symbol : string] : AssetHistoryResponse,},
 };
 
 export type SimulationResults = {
@@ -44,23 +42,23 @@ export type SimulationResults = {
 
 
 export const doSimulate = (args: SimulationArgs) => {
-    const {duration, initialInvestment, maxLtv, leverage, positions, reserves} = args;
+    const {initialInvestment, maxLtv, leverage, positions, reserves, aprs} = args;
 
     //@TODO?  @normalization of Pct values
-    const {longTotal, shortTotal} = Object.keys(positions).reduce(({longTotal, shortTotal}, key) => {
-        return {longTotal: longTotal+positions[key].supplyPct, shortTotal: shortTotal+positions[key].borrowPct};
+    const {longTotal, shortTotal} = Object.keys(positions).reduce(({longTotal, shortTotal}, symbol) => {
+        return {longTotal: longTotal+positions[symbol].supplyPct, shortTotal: shortTotal+positions[symbol].borrowPct};
     }, {longTotal:0, shortTotal: 0});
 
     //Extract and normalize longs and shorts
-    const {longs, totals} = Object.keys(positions).filter(key => positions[key].supplyPct > 0).reduce(({longs, totals}, key) => {
-        const assetDetails = reserves.find(asset => asset.symbol === key); //TODO use memoized selector... ??
+    const {longs, totals} = Object.keys(positions).filter(key => positions[key].supplyPct > 0).reduce(({longs, totals}, symbol) => {
+        const assetDetails = reserves[symbol];
 
         if (assetDetails) {
-            const prices = args.prices[key].prices;//Number(assetDetails.priceInUSD);
+            const prices = args.prices[symbol].prices;
 
             const initialPrice = prices[0][1]; //@TODO
             
-            longs[key] = { size: (initialInvestment * (1+leverage*maxLtv) * positions[key].supplyPct / longTotal) / initialPrice, prices, apr: Number(assetDetails.supplyAPR), };
+            longs[symbol] = { size: (initialInvestment * (1+leverage*maxLtv) * positions[symbol].supplyPct / longTotal) / initialPrice, prices, apr: Number(assetDetails.supplyAPR), };
 
             totals.liquidationThresh += Number(assetDetails.formattedReserveLiquidationThreshold);
             totals.liquidationPenalty += Number(assetDetails.formattedReserveLiquidationBonus);
@@ -72,16 +70,16 @@ export const doSimulate = (args: SimulationArgs) => {
     }, {longs: {} as {[k: string]: {size: number, prices: Array<any>, apr: number,}}, totals: { liquidationThresh: 0, liquidationPenalty: 0, }}); //@TODO Type
 
 
-    const shorts = Object.keys(positions).filter(key => positions[key].borrowPct > 0).reduce((shorts, key) => {
-        const assetDetails = reserves.find(asset => asset.symbol === key); //TODO use memoized selector... ??
+    const shorts = Object.keys(positions).filter(key => positions[key].borrowPct > 0).reduce((shorts, symbol) => {
+        const assetDetails = reserves[symbol];
 
         if (assetDetails) {
-            const prices = args.prices[key].prices;//Number(assetDetails.priceInUSD);
+            const prices = args.prices[symbol].prices;
 
             const initialPrice = prices[0][1]; //@TODO
 
             //@@TODO LEVERAGE
-            shorts[key] = { size: (initialInvestment * maxLtv * leverage * positions[key].borrowPct / shortTotal) / initialPrice, prices, apr: Number(assetDetails.variableBorrowAPR), };
+            shorts[symbol] = { size: (initialInvestment * maxLtv * leverage * positions[symbol].borrowPct / shortTotal) / initialPrice, prices, apr: Number(assetDetails.variableBorrowAPR), };
         } else {
             throw new Error("asset not found in reserves");
         }
@@ -91,13 +89,12 @@ export const doSimulate = (args: SimulationArgs) => {
 
 
     const avgLiquidationThreshold = totals.liquidationThresh / Object.keys(longs).length;
-    const avgLiquidationPenalty = totals.liquidationPenalty / Object.keys(longs).length;
-
 
     //aprs are hourly
     //simulate for each hour in the date interval
-    const sym1 = Object.keys(args.aprs)[0];
-    args.aprs[sym1].map((aprData, idx) => {
+    //use the first symbol in our aprs object, this should be adequate
+    //@TODO stop somehow for arbitrary date range?
+    Object.values(aprs)[0].forEach((aprData, idx) => {
         const currentTimestamp = new Date(aprData.x.year, aprData.x.month, aprData.x.date, aprData.x.hours).valueOf() / 1000;
 
         const newLongTotal = Object.keys(longs).reduce((total, key) => {
@@ -127,10 +124,15 @@ export const doSimulate = (args: SimulationArgs) => {
         }, 0);
 
         //Check for liquidation
-        if (newShortTotal / newLongTotal > maxLtv) {
+        if (newShortTotal / newLongTotal > avgLiquidationThreshold) {
             //do a liquidation
             console.log(`liquidate at ${currentTimestamp}`);
-            //@@TODO            
+            
+            //we don't care what the penalty is,
+            //if our strategy results in a simulated liquidation it's almost certainly bad
+            // return {
+            //     li,
+            // };
         }
     });
 

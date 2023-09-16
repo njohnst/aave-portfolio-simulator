@@ -1,11 +1,12 @@
 import { Button, FormControl, Grid, InputAdornment, InputLabel, MenuItem, Select, Slider, Stack, TextField, Typography} from '@mui/material';
 import { GridToolbarContainer } from '@mui/x-data-grid';
-import V3_MARKETS_LIST, { Market } from '@/app/utils/v3Markets';
+import V3_MARKETS_LIST from '@/app/store/services/utils/v3Markets';
 
 import React from 'react';
 
 import { useAppDispatch, useAppSelector } from '../hooks';
-import { fetchMarketData, selectMarket, selectMaxLeverage, selectMaxLtv, selectLeverage, setLeverage, selectCurrentLtv, selectInitialInvestment, setInitialInvestment, runSimulation, selectSimulationResults, fetchHistoricalPrices } from "@/app/store/slices/positionSlice";
+import { selectMarket, selectMaxLeverage, selectMaxLtv, selectLeverage, setLeverage, selectCurrentLtv, selectInitialInvestment, setInitialInvestment, selectPositions, selectReservesUnsafe } from "@/app/store/slices/positionSlice";
+import { useLazyGetSimulationResultQuery } from '../store/services/simulatorApi';
 
 const LEVERAGE_STEP_SIZE = 0.01;
 
@@ -20,11 +21,22 @@ export default function MarketToolbar() {
   const currentLtv = useAppSelector(selectCurrentLtv);
   const initialInvestment = useAppSelector(selectInitialInvestment);
 
-  const simResults = useAppSelector(selectSimulationResults);
+  const positions = useAppSelector(selectPositions);
+  
+  const reserves = useAppSelector(selectReservesUnsafe); //@TODO!
+
+  
+  //     aprs,
+  //     prices,
+  // };
+
+  
+
+  const [lazySimTrigger, lazySimResults] = useLazyGetSimulationResultQuery();
   
   return (
     <GridToolbarContainer>
-      <Grid container xs={12} spacing={2}>
+      <Grid container spacing={2}>
         <Grid item xs={4}>
           <FormControl>
             <InputLabel id="market-chain">Select V3 Market</InputLabel>
@@ -33,9 +45,6 @@ export default function MarketToolbar() {
               id="market-chain-select"
               value={marketKey}
               label="Chain ID"
-              onChange={(e) => {
-                dispatch(fetchMarketData(e.target.value));
-              }}
             >
               {Object.keys(V3_MARKETS_LIST).map((k : string) => {
                 const market = V3_MARKETS_LIST[k];
@@ -90,13 +99,13 @@ export default function MarketToolbar() {
         <Grid item xs={4}>
           {/* TODO HACK */}
           <Button
-            onClick={()=>dispatch(runSimulation(31536000))}
+            onClick={()=>lazySimTrigger(null)}
           >
             RUN
           </Button>
           <TextField
             label="Sim results"
-            value={`NAV: $${simResults?.nav ?? 0}, Longs: $${simResults?.longSizeUSD ?? 0}, Shorts: $${simResults?.shortSizeUSD ?? 0}`}
+            value={`NAV: $${lazySimResults?.data?.nav ?? 0}, Longs: $${lazySimResults?.data?.longSizeUSD ?? 0}, Shorts: $${lazySimResults?.data?.shortSizeUSD ?? 0}`}
           />
         </Grid>
       </Grid>
