@@ -2,6 +2,7 @@ import { PayloadAction, createSlice } from '@reduxjs/toolkit';
 import { RootState } from '..';
 import { SimulationResults } from '../services/simulation/simulator';
 import { ReservesData } from '../services/web3/fetchAaveV3Data';
+import dayjs from 'dayjs';
 
 const DEFAULT_MARKET : string = "polygonV3";
 
@@ -26,6 +27,9 @@ export interface PositionState {
     initialInvestment: number, //in USD
     leverage: number,
 
+    from: number, //date from (for simulation)
+    to: number, //date to (for simulation)
+
     simulationResults: SimulationResults,
 };
 
@@ -42,6 +46,7 @@ export const positionSlice = createSlice({
             shortSizeUSD: 0,
             nav: 0,
         },
+        from: dayjs().subtract(1, 'year').startOf('day').unix(),
     },
     reducers: {
         setSupplyPctBySymbol(state, action: PayloadAction<[string, number]>) {
@@ -76,10 +81,13 @@ export const positionSlice = createSlice({
         setInitialInvestment: (state, action: PayloadAction<number>) => {
             state.initialInvestmentUSD = action.payload;
         },
+        setFromDate: (state, action) => {
+            state.from = action.payload;
+        },
     },
 });
 
-export const { setSupplyPctBySymbol, setBorrowPctBySymbol, setLeverage, setInitialInvestment } = positionSlice.actions;
+export const { setSupplyPctBySymbol, setBorrowPctBySymbol, setLeverage, setInitialInvestment, setFromDate } = positionSlice.actions;
 
 export const selectMarket = (state: RootState) => state.position.market;
 export const selectPositions = (state: RootState) => state.position.positions;
@@ -100,5 +108,6 @@ export const selectBorrowPctBySymbol = (state: RootState, symbol: string) => {
     return state.position.positions[symbol]?.borrowPct ?? 0;
 };
 
+export const selectFromDate = (state: RootState) => state.position.from;
 
 export default positionSlice.reducer;

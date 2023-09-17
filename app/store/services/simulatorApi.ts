@@ -8,6 +8,8 @@ import { AprData, SimulationArgs, doSimulate } from "./simulation/simulator";
 import { RootState } from "..";
 import { ReserveMap } from "../slices/positionSlice";
 import { ThunkDispatch } from "@reduxjs/toolkit";
+import dayjs from "dayjs";
+import V3_MARKETS_LIST from "./utils/v3Markets";
 
 
 const simulatorBaseQuery: BaseQueryFn = async (args, _api, _extraOptions) => {
@@ -87,10 +89,24 @@ export const simulatorApi = createApi({
     baseQuery: simulatorBaseQuery,
     endpoints: (builder) => ({
         getSimulationResult: builder.query({
-            queryFn: async ({ marketKey, initialInvestment, maxLtv, leverage, positionMap, reservesMap, }, { dispatch, getState }, _options, runSimulationQuery) => {
+            queryFn: async ({ marketKey, initialInvestment, maxLtv, leverage, positionMap, reservesMap, fromDate }, { dispatch, getState }, _options, runSimulationQuery) => {
                 const state = getState() as RootState;
 
                 try {
+                    //input validation
+                    if  (
+                            initialInvestment <= 0
+                            || !(marketKey in V3_MARKETS_LIST) //market doesn't exist
+                            || maxLtv <= 0 //invalid LTV
+                            || leverage <= 0 //invalid leverage
+                            || !Object.keys(positionMap).length //no positions specified
+                            || Object.keys(reservesMap).length < Object.keys(positionMap).length //there are more positions than reserves, which means a reserve lookup will fail
+                            || !dayjs(fromDate).isValid() //invalid start date for simulation
+                        )
+                    {
+                        throw new Error("invalid arguments passed to simulation api");
+                    }
+
                     //get the list of coingecko tokens
                     const cgLut = await apiSubscriptionShim.getCGList(state, dispatch);
                 
@@ -102,11 +118,10 @@ export const simulatorApi = createApi({
 
                         const coin = cgLut[symbol.toLowerCase()][assetAddress] ?? cgLut[symbol.toLowerCase()][name];
 
-                        const from = String(Math.floor(new Date((new Date()).valueOf() - 1000*60*60*24*30).valueOf()/1000));
-                        const to = String(Math.floor(new Date().valueOf()/1000));
-                
-                        const priceHistory = await apiSubscriptionShim.getCGHistoryForToken(state, dispatch, {coin, from, to});
-                        const aprHistory = await apiSubscriptionShim.getAaveHistoryForToken(state, dispatch, {marketKey, assetAddress, from});
+                        const days = dayjs().diff(dayjs.unix(fromDate), 'day'); //get the number of days we want to input into coingecko API
+
+                        const priceHistory = await apiSubscriptionShim.getCGHistoryForToken(state, dispatch, {coin, days});
+                        const aprHistory = await apiSubscriptionShim.getAaveHistoryForToken(state, dispatch, {marketKey, assetAddress, from: fromDate});
                         
                         return {priceResults: [symbol, priceHistory], aprResults: [symbol, aprHistory]};
                     }))).reduce((results, item) => {
@@ -131,7 +146,7 @@ export const simulatorApi = createApi({
                 }
                 catch (e) {
                     return {
-                        error: e,
+                        error: e instanceof Error ? e.message : e,
                     };
                 }
             },

@@ -3,7 +3,7 @@
 # Use cases
 
 1. Specify a long position and short position; leverage ratio, safety margin, etc.,
-then simulate that portfolio on the given timescale
+then simulate that portfolio on the given timescale (from DATE until now; default is 1 year in the past until now)
 
 2. Find the optimal portfolio given certain constraints (?)
 

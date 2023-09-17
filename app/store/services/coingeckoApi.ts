@@ -2,10 +2,11 @@ import { FetchBaseQueryError, createApi, fetchBaseQuery } from "@reduxjs/toolkit
 
 const BASE_URL = "https://api.coingecko.com/api/v3/coins";
 const LIST_ENDPOINT = "/list?include_platform=true"; //hardcode platform variable; this is for searching by contract
-const CHART_RANGE_ENDPOINT = "/market_chart/range";
+const CHART_ENDPOINT = "/market_chart";
 
 const BASE_CURRENCY = "usd";
 const PRECISION = "full";
+const INTERVAL = "daily";
 
 export type AssetListing = {
     id: string,
@@ -34,8 +35,7 @@ export type CGAssetIDLookup = {
 
 export type CGPriceQuery = {
     coin: string,
-    from: string,
-    to: string,
+    days: number,
 };
 
 export const coingeckoApi = createApi({
@@ -84,12 +84,12 @@ export const coingeckoApi = createApi({
                 }
             },
         }),
-        //https://api.coingecko.com/api/v3/coins/${coin}/market_chart/range?vs_currency=usd&from=${from}&to=${to}&precision=full
+        //https://api.coingecko.com/api/v3/coins/${coin}/market_chart?vs_currency=usd&days=${days}&precision=full&interval=daily
         getHistory: builder.query({
             queryFn: async (coinQuery: CGPriceQuery, _api, _options, baseQuery) => {
-                const {coin, from, to} = coinQuery;
+                const {coin, days} = coinQuery;
 
-                const result = await baseQuery(`/${coin}${CHART_RANGE_ENDPOINT}?vs_currency=${BASE_CURRENCY}&precision=${PRECISION}&from=${from}&to=${to}`);
+                const result = await baseQuery(`/${coin}${CHART_ENDPOINT}?vs_currency=${BASE_CURRENCY}&precision=${PRECISION}&interval=${INTERVAL}&days=${days}`);
 
                 if (result.data) {
                     return { data: result.data };

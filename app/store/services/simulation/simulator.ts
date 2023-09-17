@@ -1,3 +1,4 @@
+import dayjs from "dayjs";
 import { PositionMap, ReserveMap } from "../../slices/positionSlice";
 import { AssetHistoryResponse } from "@/app/store/services/coingeckoApi";
 
@@ -10,6 +11,8 @@ const SECONDS_IN_A_YEAR = 31536000; //For the purpose of getting rates per secon
 function getRatePerSecond(apr : number) {
     return apr / SECONDS_IN_A_YEAR;
 }
+
+const COMPOUNDING_BY_SECOND_FOR_ONE_DAY = 60 * 60 * 24; //60 seconds * 60 minutes * 24 hours
 
 export type AprData = {
     liquidityRate_avg: number,
@@ -35,13 +38,19 @@ export type SimulationArgs = {
 };
 
 export type SimulationResults = {
-    longSizeUSD: number,
-    shortSizeUSD: number,
-    nav: number,
+    liquidated: boolean, //mandatory
+    timestamp?: string, //optional (for liquidation case)
+
+    //optional: expected to be filled if liquidated is false
+    longSizeUSD?: number,
+    shortSizeUSD?: number,
+    nav?: number,
 };
 
+class LiquidationError extends Error {};
 
-export const doSimulate = (args: SimulationArgs) => {
+
+export const doSimulate = (args: SimulationArgs): SimulationResults => {
     const {initialInvestment, maxLtv, leverage, positions, reserves, aprs} = args;
 
     //@TODO?  @normalization of Pct values
@@ -91,50 +100,64 @@ export const doSimulate = (args: SimulationArgs) => {
     const avgLiquidationThreshold = totals.liquidationThresh / Object.keys(longs).length;
 
     //aprs are hourly
-    //simulate for each hour in the date interval
+    //simulate for each day in the date interval
     //use the first symbol in our aprs object, this should be adequate
     //@TODO stop somehow for arbitrary date range?
-    Object.values(aprs)[0].forEach((aprData, idx) => {
-        const currentTimestamp = new Date(aprData.x.year, aprData.x.month, aprData.x.date, aprData.x.hours).valueOf() / 1000;
-
-        const newLongTotal = Object.keys(longs).reduce((total, key) => {
-            //Add interest payment to supplied amount
-            //since this iteration is 1 hour, and compounding is per second,
-            //compound 60s * 60minutes = 3600 times
-            longs[key].size *= (1+getRatePerSecond(longs[key].apr))**3600;
-
-            const price = longs[key].prices[idx][1];
-
-            total += longs[key].size * price;
-
-            return total;
-        }, 0);
-
-        const newShortTotal = Object.keys(shorts).reduce((total, key) => {
-            //Add interest payment to owed amount
-            //since this iteration is 1 hour, and compounding is per second,
-            //compound 60s * 60minutes = 3600 times
-            shorts[key].size *= (1+getRatePerSecond(shorts[key].apr))**3600;
-
-            const price = shorts[key].prices[idx][1];
-
-            total += shorts[key].size * price;
-
-            return total;
-        }, 0);
-
-        //Check for liquidation
-        if (newShortTotal / newLongTotal > avgLiquidationThreshold) {
-            //do a liquidation
-            console.log(`liquidate at ${currentTimestamp}`);
-            
-            //we don't care what the penalty is,
-            //if our strategy results in a simulated liquidation it's almost certainly bad
-            // return {
-            //     li,
-            // };
+    try {
+        Object.values(aprs)[0].forEach((aprData, idx) => {
+            const currentTimestamp = dayjs(new Date(aprData.x.year, aprData.x.month, aprData.x.date, aprData.x.hours)).unix();
+    
+            const newLongTotal = Object.keys(longs).reduce((total, key) => {
+                //Add interest payment to supplied amount
+                //since this iteration is 24 hours, and compounding is per second,
+                //compound 60s * 60minutes * 24 = 86400 times
+                longs[key].size *= (1+getRatePerSecond(longs[key].apr))**COMPOUNDING_BY_SECOND_FOR_ONE_DAY;
+    
+                const price = longs[key].prices[idx][1];
+    
+                total += longs[key].size * price;
+    
+                return total;
+            }, 0);
+    
+            const newShortTotal = Object.keys(shorts).reduce((total, key) => {
+                //Add interest payment to owed amount
+                //since this iteration is 24 hours, and compounding is per second,
+                //compound 60s * 60minutes * 24 = 86400 times
+                shorts[key].size *= (1+getRatePerSecond(shorts[key].apr))**COMPOUNDING_BY_SECOND_FOR_ONE_DAY;
+    
+                const price = shorts[key].prices[idx][1];
+    
+                total += shorts[key].size * price;
+    
+                return total;
+            }, 0);
+    
+            //Check for liquidation
+            if (newShortTotal / newLongTotal > avgLiquidationThreshold) {
+                //do a liquidation
+                console.log(`liquidate at ${currentTimestamp}`);
+                
+                //we don't care what the penalty is,
+                //if our strategy results in a simulated liquidation it's almost certainly bad
+                throw new LiquidationError(String(currentTimestamp));
+            }
+        });
+    }
+    catch (e) {
+        if (e instanceof LiquidationError) {
+            //return with the liquidation timestamp
+            return {
+                liquidated: true,
+                timestamp: e.message,
+            };
+        } else {
+            //otherwise, some other unexpected error happened, let's throw it
+            //rethrow
+            throw e;
         }
-    });
+    }
+    
 
     //Compute results
 
@@ -156,6 +179,7 @@ export const doSimulate = (args: SimulationArgs) => {
     }, 0);
 
     return {
+        liquidated: false,
         longSizeUSD: newLongTotal,
         shortSizeUSD: newShortTotal,
         nav: newLongTotal-newShortTotal,
