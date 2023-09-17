@@ -76,7 +76,7 @@ jobs:
       - name: Build with Next.js
         run: ${{ steps.detect-package-manager.outputs.runner }} next build
       - name: DEBUGGING PRINT DIR
-        run: ls -la
+        run: ls -la; ls -la ..; ls -la .next
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v2
         with:
