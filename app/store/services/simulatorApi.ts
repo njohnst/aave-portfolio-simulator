@@ -154,4 +154,4 @@ export const simulatorApi = createApi({
     }),
 });
 
-export const { useLazyGetSimulationResultQuery } = simulatorApi;
+export const { useGetSimulationResultQuery } = simulatorApi;

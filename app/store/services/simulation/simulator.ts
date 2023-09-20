@@ -37,14 +37,18 @@ export type SimulationArgs = {
     prices: { [symbol : string] : AssetHistoryResponse,},
 };
 
+export type SimulationSnapshot = {
+    timestamp: number,
+    longTotal: number,
+    shortTotal: number,
+};
+
 export type SimulationResults = {
     liquidated: boolean, //mandatory
     timestamp?: string, //optional (for liquidation case)
 
     //optional: expected to be filled if liquidated is false
-    longSizeUSD?: number,
-    shortSizeUSD?: number,
-    nav?: number,
+    snapshots?: SimulationSnapshot[],
 };
 
 class LiquidationError extends Error {};
@@ -53,13 +57,8 @@ class LiquidationError extends Error {};
 export const doSimulate = (args: SimulationArgs): SimulationResults => {
     const {initialInvestment, maxLtv, leverage, positions, reserves, aprs} = args;
 
-    //@TODO?  @normalization of Pct values
-    const {longTotal, shortTotal} = Object.keys(positions).reduce(({longTotal, shortTotal}, symbol) => {
-        return {longTotal: longTotal+positions[symbol].supplyPct, shortTotal: shortTotal+positions[symbol].borrowPct};
-    }, {longTotal:0, shortTotal: 0});
-
     //Extract and normalize longs and shorts
-    const {longs, totals} = Object.keys(positions).filter(key => positions[key].supplyPct > 0).reduce(({longs, totals}, symbol) => {
+    const longs = Object.keys(positions).filter(key => positions[key].supplyPct > 0).reduce((longs, symbol) => {
         const assetDetails = reserves[symbol];
 
         if (assetDetails) {
@@ -67,16 +66,13 @@ export const doSimulate = (args: SimulationArgs): SimulationResults => {
 
             const initialPrice = prices[0][1]; //@TODO
             
-            longs[symbol] = { size: (initialInvestment * (1+leverage*maxLtv) * positions[symbol].supplyPct / longTotal) / initialPrice, prices, apr: Number(assetDetails.supplyAPR), };
-
-            totals.liquidationThresh += Number(assetDetails.formattedReserveLiquidationThreshold);
-            totals.liquidationPenalty += Number(assetDetails.formattedReserveLiquidationBonus);
+            longs[symbol] = { size: (initialInvestment * (1+leverage*maxLtv) * positions[symbol].supplyPct / 100) / initialPrice, prices, };
         } else {
             throw new Error("asset not found in reserves");
         }
 
-        return {longs, totals};
-    }, {longs: {} as {[k: string]: {size: number, prices: Array<any>, apr: number,}}, totals: { liquidationThresh: 0, liquidationPenalty: 0, }}); //@TODO Type
+        return longs;
+    }, {} as {[k: string]: {size: number, prices: Array<any>, }}); //@TODO Type
 
 
     const shorts = Object.keys(positions).filter(key => positions[key].borrowPct > 0).reduce((shorts, symbol) => {
@@ -88,43 +84,40 @@ export const doSimulate = (args: SimulationArgs): SimulationResults => {
             const initialPrice = prices[0][1]; //@TODO
 
             //@@TODO LEVERAGE
-            shorts[symbol] = { size: (initialInvestment * maxLtv * leverage * positions[symbol].borrowPct / shortTotal) / initialPrice, prices, apr: Number(assetDetails.variableBorrowAPR), };
+            shorts[symbol] = { size: (initialInvestment * maxLtv * leverage * positions[symbol].borrowPct / 100) / initialPrice, prices, };
         } else {
             throw new Error("asset not found in reserves");
         }
 
         return shorts;
-    }, {} as {[k: string]: {size: number, prices: Array<any>, apr: number,}}); //@TODO type
+    }, {} as {[k: string]: {size: number, prices: Array<any>, }}); //@TODO type
 
-
-    const avgLiquidationThreshold = totals.liquidationThresh / Object.keys(longs).length;
-
-    //aprs are hourly
     //simulate for each day in the date interval
     //use the first symbol in our aprs object, this should be adequate
     //@TODO stop somehow for arbitrary date range?
     try {
-        Object.values(aprs)[0].forEach((aprData, idx) => {
+        const snapshots = Object.values(aprs)[0].map((aprData, idx) => {
             const currentTimestamp = dayjs(new Date(aprData.x.year, aprData.x.month, aprData.x.date, aprData.x.hours)).unix();
     
-            const newLongTotal = Object.keys(longs).reduce((total, key) => {
+            const {newLongTotal, weightedThresholdSum}= Object.keys(longs).reduce((total, key) => {
                 //Add interest payment to supplied amount
                 //since this iteration is 24 hours, and compounding is per second,
                 //compound 60s * 60minutes * 24 = 86400 times
-                longs[key].size *= (1+getRatePerSecond(longs[key].apr))**COMPOUNDING_BY_SECOND_FOR_ONE_DAY;
+                longs[key].size *= (1+getRatePerSecond(aprs[key][idx].liquidityRate_avg))**COMPOUNDING_BY_SECOND_FOR_ONE_DAY;
     
                 const price = longs[key].prices[idx][1];
     
-                total += longs[key].size * price;
+                total.newLongTotal += longs[key].size * price;
+                total.weightedThresholdSum += longs[key].size * price * Number(reserves[key].formattedReserveLiquidationThreshold);
     
                 return total;
-            }, 0);
+            }, {newLongTotal: 0, weightedThresholdSum: 0});
     
             const newShortTotal = Object.keys(shorts).reduce((total, key) => {
                 //Add interest payment to owed amount
                 //since this iteration is 24 hours, and compounding is per second,
                 //compound 60s * 60minutes * 24 = 86400 times
-                shorts[key].size *= (1+getRatePerSecond(shorts[key].apr))**COMPOUNDING_BY_SECOND_FOR_ONE_DAY;
+                shorts[key].size *= (1+getRatePerSecond(aprs[key][idx].variableBorrowRate_avg))**COMPOUNDING_BY_SECOND_FOR_ONE_DAY;
     
                 const price = shorts[key].prices[idx][1];
     
@@ -134,7 +127,7 @@ export const doSimulate = (args: SimulationArgs): SimulationResults => {
             }, 0);
     
             //Check for liquidation
-            if (newShortTotal / newLongTotal > avgLiquidationThreshold) {
+            if (weightedThresholdSum / newShortTotal < 1 + Number.EPSILON) {
                 //do a liquidation
                 console.log(`liquidate at ${currentTimestamp}`);
                 
@@ -142,7 +135,20 @@ export const doSimulate = (args: SimulationArgs): SimulationResults => {
                 //if our strategy results in a simulated liquidation it's almost certainly bad
                 throw new LiquidationError(String(currentTimestamp));
             }
+
+            return {
+                timestamp: currentTimestamp,
+                longTotal: newLongTotal,
+                shortTotal: newShortTotal,
+            };
         });
+
+        
+        //Return results
+        return {
+            liquidated: false,
+            snapshots,
+        };
     }
     catch (e) {
         if (e instanceof LiquidationError) {
@@ -157,31 +163,4 @@ export const doSimulate = (args: SimulationArgs): SimulationResults => {
             throw e;
         }
     }
-    
-
-    //Compute results
-
-    //@@TODO REFACTOR
-    const newLongTotal = Object.keys(longs).reduce((total, key) => {
-        const price = longs[key].prices.at(-1)[1]; //@TODO allow different price predictions, historical backtesting...
-
-        total += longs[key].size * price;
-
-        return total;
-    }, 0);
-
-    const newShortTotal = Object.keys(shorts).reduce((total, key) => {
-        const price = shorts[key].prices.at(-1)[1]; //@TODO allow different price predictions, historical backtesting...
-
-        total += shorts[key].size * price;
-
-        return total;
-    }, 0);
-
-    return {
-        liquidated: false,
-        longSizeUSD: newLongTotal,
-        shortSizeUSD: newShortTotal,
-        nav: newLongTotal-newShortTotal,
-    }; //@@TODO HACK FOR NOW...
 }

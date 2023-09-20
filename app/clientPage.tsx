@@ -1,70 +1,42 @@
 "use client";
 
-import { DataGrid, GridColDef, GridRowsProp } from '@mui/x-data-grid';
-import React from "react";
-import { useAppSelector } from './hooks';
-import { selectMarket } from "@/app/store/slices/positionSlice";
-import MarketToolbar from "@/app/components/MarketToolbar";
-import AllocationSlider from './components/AllocationSlider';
-import AnnouncementIcon from '@mui/icons-material/Announcement';
-import { Tooltip } from '@mui/material';
-import { useGetAaveContractDataQuery } from './store/services/aaveApi';
+import { Box, Tab, Tabs } from "@mui/material";
+import { useAppSelector } from "./hooks";
+import { selectSimulationKeys } from "@/app/store/slices/positionSlice";
+import ResultsPanel from "@/app/components/ResultsPanel";
+import SettingsPanel from "@/app/components/SettingsPanel";
+import { SyntheticEvent, useState } from "react";
 
-const formatPercentage = (n: number, decimalPlaces: number) => parseFloat((n*100).toFixed(decimalPlaces))+"%";
-
-const cols : GridColDef[] = [
-  { 
-    field: "symbol",
-    headerName: "Symbol",
-    renderCell: (params) => { 
-      const canBorrow = params.row["borrowingEnabled"];
-      const isCollateral = params.row["usageAsCollateralEnabled"];
-
-      /** it either can't be borrowed, or can't be collateral; if it is both then asset won't be displayed on list */
-      const title = !canBorrow ? "Can't be borrowed" : "Can't be used as collateral";
-
-      return !canBorrow || !isCollateral
-      ? <Tooltip title={title}>
-          <span className="table-cell-truncate">
-            {params.value}
-            &nbsp;
-            <AnnouncementIcon/>
-          </span>
-        </Tooltip>
-      : <>{params.value}</>;
-    },
-  },
-  { field: "name", headerName: "Name", },
-  { field: "supplyAPR", headerName: "Supply APR", valueFormatter: (params) => formatPercentage(Number(params.value), 2), },
-  { field: "variableBorrowAPR", headerName: "Borrow APR (Variable)", valueFormatter: (params) => formatPercentage(Number(params.value), 2), },
-  { field: "formattedBaseLTVasCollateral", headerName: "Base LTV", valueFormatter: (params) => formatPercentage(Number(params.value), 2), },
-  { field: "formattedReserveLiquidationBonus", headerName: "Liquidation Penalty", valueFormatter: (params) => formatPercentage(Number(params.value), 2), },
-  { field: "formattedReserveLiquidationThreshold", headerName: "Liquidation Threshold", valueFormatter: (params) => formatPercentage(Number(params.value), 2), },
-  { field: "priceInUSD", headerName: "Price (USD)", valueFormatter: (params) => "$"+params.value, },
-
-  { field: "allocation", headerName: "Allocation", flex: 1, renderCell:(params)=><AllocationSlider symbol={params.row.symbol}/>, },
-];
+const TabPanel = (props: { children?: React.ReactNode, currentTab: number, thisTab: number}) => {
+    return (
+        <div hidden={props.currentTab !== props.thisTab}>
+            {props.children}
+        </div>
+    );
+};
 
 export default function ClientPage() {
-  const marketKey = useAppSelector(selectMarket);
-  const reservesResult = useGetAaveContractDataQuery(marketKey);
+    const simulationKeys = useAppSelector(selectSimulationKeys);
 
-  return <>
-    <DataGrid
-      rows={reservesResult.isSuccess ? Object.values(reservesResult.data) : []}
-      columns={cols}
-      slots={{
-        toolbar: MarketToolbar
-      }}
-      initialState={{
-        pagination: {
-          paginationModel: {
-            pageSize: 10,
-          },
-        },
-      }}
-      pageSizeOptions={[5,10,20]}
-      disableRowSelectionOnClick
-    />
-  </>;
-};
+    const [currentTab, setCurrentTab] = useState(0);
+
+    return (
+        <Box sx={{flexGrow:1}}>
+            <Tabs value={currentTab} onChange={(_ev: SyntheticEvent, newValue: number) => setCurrentTab(newValue)}>
+                <Tab label="Settings" id="tab-main" aria-controls="tabpanel-main"/>
+                {Object.keys(simulationKeys).filter((key) => simulationKeys[key] === true).map((key, idx) => {
+                    return <Tab key={JSON.stringify(key)} label={`Simulation Results #${idx+1}`} id={`tab-sim-${1+idx}`} aria-controls={`tabpanel-sim-${1+idx}`}/>;
+                })}
+            </Tabs>
+            <TabPanel currentTab={currentTab} thisTab={0}>
+                <SettingsPanel/>
+            </TabPanel>
+            {Object.keys(simulationKeys).map((key, idx) => {
+              return <TabPanel key={JSON.stringify(key)} currentTab={currentTab} thisTab={1+idx}>
+                <ResultsPanel simulationArgs={JSON.parse(key)}/>
+              </TabPanel>;
+            })}
+        </Box>
+        
+    );
+}

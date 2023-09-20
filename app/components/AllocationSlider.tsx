@@ -1,10 +1,6 @@
 import { Grid, Slider, Stack, Typography } from "@mui/material";
 import { useAppDispatch, useAppSelector } from '@/app/hooks';
-import { selectSupplyPctBySymbol, selectBorrowPctBySymbol, setSupplyPctBySymbol, setBorrowPctBySymbol } from "@/app/store/slices/positionSlice";
-
-
-const MIN_ALLOCATION = 0;
-const MAX_ALLOCATION = 100;
+import { selectSupplyPctBySymbol, selectBorrowPctBySymbol, setSupplyPctBySymbol, setBorrowPctBySymbol, selectAvailableSupply, selectAvailableBorrow } from "@/app/store/slices/positionSlice";
 
 export default function AllocationSlider(props: {symbol: string}) {
     const symbol = props.symbol;
@@ -14,17 +10,21 @@ export default function AllocationSlider(props: {symbol: string}) {
     const supplyPct = useAppSelector((state) => selectSupplyPctBySymbol(state, symbol));
     const borrowPct = useAppSelector((state) => selectBorrowPctBySymbol(state, symbol));
 
+    const availableSupply = useAppSelector(selectAvailableSupply);
+    const availableBorrow = useAppSelector(selectAvailableBorrow);
+
     return (
-        <Grid container spacing={2}>
+        <Grid container justifyContent="center" spacing={2}>
             <Grid item xs={6}>
                 <Stack>
                     <Typography>Supply</Typography>
                     <Slider
                         value={supplyPct}
-                        onChange={(ev, value) => dispatch(setSupplyPctBySymbol([symbol, value as number]))}
-                        min={MIN_ALLOCATION}
-                        max={MAX_ALLOCATION}
+                        onChange={(_ev: Event, value: number | number[]) => dispatch(setSupplyPctBySymbol([symbol, Math.min(value as number, availableSupply+supplyPct)]))}
+                        min={0}
+                        max={100}
                         valueLabelDisplay="auto"
+                        size="small"
                     />
                 </Stack>
             </Grid>
@@ -35,10 +35,11 @@ export default function AllocationSlider(props: {symbol: string}) {
                         color="secondary"
 
                         value={borrowPct}
-                        onChange={(ev, value) => dispatch(setBorrowPctBySymbol([symbol, value as number]))}
-                        min={MIN_ALLOCATION}
-                        max={MAX_ALLOCATION}
+                        onChange={(_ev: Event, value: number | number[]) => dispatch(setBorrowPctBySymbol([symbol, Math.min(value as number, availableBorrow+borrowPct)]))}
+                        min={0}
+                        max={100}
                         valueLabelDisplay="auto"
+                        size="small"
                     />
                 </Stack>
             </Grid>
