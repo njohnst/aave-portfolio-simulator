@@ -8,6 +8,7 @@ const DEFAULT_MARKET : string = "polygonV3";
 export type AssetPosition = {
     supplyPct: number,
     borrowPct: number,
+    stakingApr: number,
 };
 
 export type PositionMap = {
@@ -21,6 +22,7 @@ export type ReserveMap = {
 export type SimulationKey = {
     marketKey: string,
     initialInvestment: number,
+    maxLtv: number,
     leverage: number,
     positionMap: PositionMap,
     reserveMap: ReserveMap,
@@ -54,7 +56,7 @@ export const positionSlice = createSlice({
     initialState: { 
         market: DEFAULT_MARKET,
         reserves: {} as ReserveMap,
-        initialInvestmentUSD: 1000,
+        initialInvestment: 1000,
         leverage: 0,
         positions: {} as PositionMap,
         availableSupply: 100, //start at 100% and decrease
@@ -62,7 +64,7 @@ export const positionSlice = createSlice({
         from: dayjs().subtract(1, 'year').startOf('day').unix(),
         simulationKeys: {} as SimulationKeyMap,
         isSimulationRunning: false,
-    },
+    } as PositionState,
     reducers: {
         setSupplyPctBySymbol(state, action: PayloadAction<[string, number]>) {
             //Check if the key exists
@@ -71,6 +73,7 @@ export const positionSlice = createSlice({
                 state.positions[action.payload[0]] = {
                     supplyPct: 0, //@TODO - rename these to Factor, as they aren't really a %
                     borrowPct: 0,
+                    stakingApr: 0,
                 };
             }
 
@@ -93,6 +96,7 @@ export const positionSlice = createSlice({
                 state.positions[action.payload[0]] = {
                     supplyPct: 0,
                     borrowPct: 0,
+                    stakingApr: 0,
                 };
             }
 
@@ -108,11 +112,24 @@ export const positionSlice = createSlice({
                 state.availableBorrow -= action.payload[1];
             }
         },
+        setStakingAprBySymbol(state, action) {
+            //Check if the key exists
+            if (!state.positions[action.payload[0]]) {
+                //key doesn't exist, let's create it
+                state.positions[action.payload[0]] = {
+                    supplyPct: 0,
+                    borrowPct: 0,
+                    stakingApr: 0,
+                };
+            }
+
+            state.positions[action.payload[0]].stakingApr = action.payload[1];
+        },
         setLeverage: (state, action: PayloadAction<number>) => {
             state.leverage = action.payload;
         },
         setInitialInvestment: (state, action: PayloadAction<number>) => {
-            state.initialInvestmentUSD = action.payload;
+            state.initialInvestment = action.payload;
         },
         setFromDate: (state, action) => {
             state.from = action.payload;
@@ -121,6 +138,9 @@ export const positionSlice = createSlice({
             state.simulationKeys[JSON.stringify(action.payload)] = false; //assume simulation not complete
             state.isSimulationRunning = true;
         },
+        deleteSimulationKey: (state, action) => {
+            delete state.simulationKeys[JSON.stringify(action.payload)];
+        },
         setSimulationKeyComplete: (state, action) => {
             state.simulationKeys[JSON.stringify(action.payload)] = true;
             state.isSimulationRunning = false;
@@ -128,12 +148,12 @@ export const positionSlice = createSlice({
     },
 });
 
-export const { setSupplyPctBySymbol, setBorrowPctBySymbol, setLeverage, setInitialInvestment, setFromDate, addSimulationKey, setSimulationKeyComplete } = positionSlice.actions;
+export const { setSupplyPctBySymbol, setBorrowPctBySymbol, setStakingAprBySymbol, setLeverage, setInitialInvestment, setFromDate, addSimulationKey, deleteSimulationKey, setSimulationKeyComplete } = positionSlice.actions;
 
 export const selectMarket = (state: RootState) => state.position.market;
 export const selectPositions = (state: RootState) => state.position.positions;
 export const selectLeverage = (state: RootState) => state.position.leverage;
-export const selectInitialInvestment = (state: RootState) => state.position.initialInvestmentUSD;
+export const selectInitialInvestment = (state: RootState) => state.position.initialInvestment;
 
 export const selectAvailableSupply = (state: RootState) => state.position.availableSupply;
 export const selectAvailableBorrow = (state: RootState) => state.position.availableBorrow;
@@ -148,6 +168,10 @@ export const selectSupplyPctBySymbol = (state: RootState, symbol: string) => {
 
 export const selectBorrowPctBySymbol = (state: RootState, symbol: string) => {
     return state.position.positions[symbol]?.borrowPct ?? 0;
+};
+
+export const selectStakingAprBySymbol = (state: RootState, symbol: string) => {
+    return state.position.positions[symbol]?.stakingApr ?? 0;
 };
 
 export const selectFromDate = (state: RootState) => state.position.from;

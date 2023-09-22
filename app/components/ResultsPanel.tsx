@@ -1,11 +1,10 @@
 import { LineChart, Line, ResponsiveContainer, Legend, Tooltip, XAxis, YAxis } from 'recharts';
 import { useGetSimulationResultQuery } from '../store/services/simulatorApi';
 import { SimulationResults } from '../store/services/simulation/simulator';
-import { Grid, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
-import { SimulationKey, selectSimulationKeys, setSimulationKeyComplete } from '../store/slices/positionSlice';
+import { Grid, Table, TableBody, TableCell, TableContainer, TableRow, useMediaQuery, useTheme } from '@mui/material';
+import { SimulationKey } from '../store/slices/positionSlice';
 import dayjs from 'dayjs';
-import { useDispatch } from 'react-redux';
-import { useAppSelector } from '../hooks';
+import React from 'react';
 
 const LabelThenVariable = (props:{label: string, value: React.ReactNode}) => {
     return <>
@@ -20,16 +19,11 @@ const LabelThenVariable = (props:{label: string, value: React.ReactNode}) => {
 
 const getTimestampAsDate = (timestamp: number) => dayjs.unix(timestamp).format("MM/DD/YY");
 
-export default function ResultsPanel(props: { simulationArgs: SimulationKey }) {
-    const simResults = useGetSimulationResultQuery(props.simulationArgs);
-    const isSimulationComplete = useAppSelector(selectSimulationKeys)[JSON.stringify(props.simulationArgs)];
+export default function ResultsPanel(props: { simulationKey: SimulationKey }) {
+    const simResults = useGetSimulationResultQuery(props.simulationKey);
+    const isSmallScreen = useMediaQuery(useTheme().breakpoints.down("md"));
 
     if (!simResults.isSuccess) {
-        return null;
-    }
-
-    if (!isSimulationComplete) {
-        useDispatch()(setSimulationKeyComplete(props.simulationArgs));
         return null;
     }
 
@@ -38,7 +32,7 @@ export default function ResultsPanel(props: { simulationArgs: SimulationKey }) {
     const finalSnapshot = simResultsData && !simResultsData.liquidated && simResultsData?.snapshots?.at(-1);
     const finalValue = (finalSnapshot && (finalSnapshot.longTotal - finalSnapshot.shortTotal)) ?? 0;
 
-    const {marketKey, initialInvestment, leverage, positionMap, fromDate} = props.simulationArgs;
+    const {marketKey, initialInvestment, leverage, positionMap, fromDate} = props.simulationKey;
 
     const {longs,shorts} = Object.keys(positionMap).reduce(({longs,shorts}, key) => {
         if (positionMap[key].supplyPct > 0) {
@@ -51,56 +45,45 @@ export default function ResultsPanel(props: { simulationArgs: SimulationKey }) {
     }, {longs: [] as {symbol:string, allocation: string}[], shorts: [] as {symbol:string, allocation:string}[]})
 
     return (
-        <Grid container spacing={2}>
-            {
-                !simResultsData.liquidated ?
-                    <Grid item xs={6}>
-                        <TableContainer>
-                            <Table>
-                                <TableBody>
-                                    <TableRow>
-                                        <LabelThenVariable label="Market" value={`${marketKey}`} />
-                                        <LabelThenVariable label="Start Date" value={dayjs.unix(fromDate).toString()} />
-                                    </TableRow>
-                                    <TableRow>
-                                        <LabelThenVariable label="Initial Investment" value={`$${initialInvestment.toFixed(2)}`} />
-                                        <LabelThenVariable label="Final Value" value={`$${(finalValue as number)?.toFixed(2)}`} />
-                                    </TableRow>
-                                    <TableRow>
-                                        <LabelThenVariable label="Initial Supply Distribution" value={longs.map(long => <p key={long.symbol}>{long.symbol}: {long.allocation}</p>)} />
-                                    </TableRow>
-                                    <TableRow>
-                                        <LabelThenVariable label="Initial Borrow Distribution" value={shorts.map(short => <p key={short.symbol}>{short.symbol}: {short.allocation}</p>)} />
-                                    </TableRow>
-                                    <TableRow>
-                                        <LabelThenVariable label="Leverage" value={String(leverage)} />
-                                    </TableRow>
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    </Grid>
-                    :
-                    <>
-                        Liquidated!
-                    </>
-            }
-            <Grid item xs={6}>
-                {
-                    !simResultsData.liquidated ?
-                        <ResponsiveContainer width="100%" height="100%" minHeight="300px">
-                            <LineChart data={simResultsData.snapshots}>
-                                <XAxis dataKey={({timestamp})=>getTimestampAsDate(timestamp)}/>
-                                <YAxis unit="$"/>
-                                <Legend/>
-                                <Tooltip/>
-                                <Line type="monotone" name="Long Total" dataKey={"longTotal"} stroke="#325ca8"/>
-                                <Line type="monotone" name="Short Total" dataKey={"shortTotal"} stroke="#ad112e"/>
-                                <Line type="monotone" name="Portfolio Value" unit="$" dataKey={({longTotal,shortTotal}) => (longTotal-shortTotal)} stroke="#1a873b"/>
-                            </LineChart>
-                        </ResponsiveContainer>
-                        :
-                        <>no data</>
-                }
+        <Grid container spacing={2} sx={{width: '100vw'}}>
+            <Grid item xs={12} md={6}>
+                <TableContainer sx={{ overflow: 'hidden' }}>
+                    <Table>
+                        <TableBody>
+                            <TableRow>
+                                <LabelThenVariable label="Market" value={marketKey} />
+                                <LabelThenVariable label="Start Date" value={dayjs.unix(fromDate).toString()} />
+                            </TableRow>
+                            <TableRow>
+                                <LabelThenVariable label="Initial Investment" value={`$${initialInvestment.toFixed(2)}`} />
+                                <LabelThenVariable label="Final Value" value={ !simResultsData.liquidated ? `$${(finalValue as number)?.toFixed(2)}` : "Liquidated!"} />
+                            </TableRow>
+                            <TableRow>
+                                <LabelThenVariable label="Initial Supply Distribution" value={longs.map(long => <p key={long.symbol}>{long.symbol}: {long.allocation}</p>)} />
+                            </TableRow>
+                            <TableRow>
+                                <LabelThenVariable label="Initial Borrow Distribution" value={shorts.map(short => <p key={short.symbol}>{short.symbol}: {short.allocation}</p>)} />
+                            </TableRow>
+                            <TableRow>
+                                <LabelThenVariable label="Leverage" value={leverage} />
+                            </TableRow>
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            </Grid>
+            <Grid item xs={12} md={6}>
+                <ResponsiveContainer width="100%" height="100%" aspect={isSmallScreen ? 1.5 : 2}>
+                    <LineChart data={simResultsData.snapshots ?? [{timestamp: fromDate, }]}>
+                        <XAxis dataKey={({timestamp})=>getTimestampAsDate(timestamp)}/>
+                        <YAxis unit="$" domain={!simResultsData.liquidated ? ["auto", "auto"] : [0, initialInvestment]}/>
+                        <Legend/>
+                        <Tooltip/>
+                        
+                        <Line type="monotone" name="Long Total" dataKey={"longTotal"} stroke="#325ca8"/>
+                        <Line type="monotone" name="Short Total" dataKey={"shortTotal"} stroke="#ad112e"/>
+                        <Line type="monotone" name="Portfolio Value" unit="$" dataKey={({longTotal,shortTotal}) => (longTotal-shortTotal)} stroke="#1a873b"/>
+                    </LineChart>
+                </ResponsiveContainer>
             </Grid>
         </Grid>
     );

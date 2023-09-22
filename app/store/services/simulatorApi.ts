@@ -6,7 +6,7 @@ import { AssetHistoryResponse, CGPriceQuery, coingeckoApi } from "./coingeckoApi
 import { simulationWorkers } from "./simulation/workerPool";
 import { AprData, SimulationArgs, doSimulate } from "./simulation/simulator";
 import { RootState } from "..";
-import { ReserveMap } from "../slices/positionSlice";
+import { ReserveMap, SimulationKey, deleteSimulationKey, setSimulationKeyComplete } from "../slices/positionSlice";
 import { ThunkDispatch } from "@reduxjs/toolkit";
 import dayjs from "dayjs";
 import V3_MARKETS_LIST from "./utils/v3Markets";
@@ -15,12 +15,17 @@ import V3_MARKETS_LIST from "./utils/v3Markets";
 const simulatorBaseQuery: BaseQueryFn = async (args, _api, _extraOptions) => {
     //Check if we can use workers
     if (window.Worker) {
-        return {
-            data: await simulationWorkers.run(args),
-        };
+        return await simulationWorkers.run(args).then(data => { return {data} }).catch((error) => { return {error: error.message} });
     } else {
-        return {
-            data: doSimulate(args), //blocking...
+        try {
+            return {
+                data: doSimulate(args), //blocking...
+            };
+        }
+        catch(e) {
+            return {
+                error: (e as Error).message,
+            };
         }
     }
 };
@@ -89,8 +94,10 @@ export const simulatorApi = createApi({
     baseQuery: simulatorBaseQuery,
     endpoints: (builder) => ({
         getSimulationResult: builder.query({
-            queryFn: async ({ marketKey, initialInvestment, maxLtv, leverage, positionMap, reservesMap, fromDate }, { dispatch, getState }, _options, runSimulationQuery) => {
+            queryFn: async (simulationKey: SimulationKey, { dispatch, getState }, _options, runSimulationQuery) => {
                 const state = getState() as RootState;
+
+                const { marketKey, initialInvestment, maxLtv, leverage, positionMap, reserveMap, fromDate } = simulationKey;
 
                 try {
                     //input validation
@@ -100,7 +107,7 @@ export const simulatorApi = createApi({
                             || maxLtv <= 0 //invalid LTV
                             || leverage <= 0 //invalid leverage
                             || !Object.keys(positionMap).length //no positions specified
-                            || Object.keys(reservesMap).length < Object.keys(positionMap).length //there are more positions than reserves, which means a reserve lookup will fail
+                            || Object.keys(reserveMap).length < Object.keys(positionMap).length //there are more positions than reserves, which means a reserve lookup will fail
                             || !dayjs(fromDate).isValid() //invalid start date for simulation
                         )
                     {
@@ -111,7 +118,7 @@ export const simulatorApi = createApi({
                     const cgLut = await apiSubscriptionShim.getCGList(state, dispatch);
                 
                     const {prices, aprs} = (await Promise.all(Object.keys(positionMap).map(async symbol => {
-                        const reserve = reservesMap[symbol];
+                        const reserve = reserveMap[symbol];
                 
                         const name = reserve?.name;
                         const assetAddress = reserve?.underlyingAsset;
@@ -121,7 +128,7 @@ export const simulatorApi = createApi({
                         const days = dayjs().diff(dayjs.unix(fromDate), 'day'); //get the number of days we want to input into coingecko API
 
                         const priceHistory = await apiSubscriptionShim.getCGHistoryForToken(state, dispatch, {coin, days});
-                        const aprHistory = await apiSubscriptionShim.getAaveHistoryForToken(state, dispatch, {marketKey, assetAddress, from: fromDate});
+                        const aprHistory = await apiSubscriptionShim.getAaveHistoryForToken(state, dispatch, {marketKey, assetAddress, from: String(fromDate)});
                         
                         return {priceResults: [symbol, priceHistory], aprResults: [symbol, aprHistory]};
                     }))).reduce((results, item) => {
@@ -135,18 +142,31 @@ export const simulatorApi = createApi({
                         maxLtv,
                         leverage,
                         positions: positionMap,
-                        reserves: reservesMap as ReserveMap,
+                        reserves: reserveMap,
                         aprs,
                         prices,
                     };
 
-                    return {
-                        data: (await runSimulationQuery(args)).data,
-                    };
+                    const queryResults = await runSimulationQuery(args);
+
+                    //tell the results panel that simulation is complete and make it visible
+                    dispatch(setSimulationKeyComplete(simulationKey));
+
+                    //if we encountered an error, delete that panel
+                    if (queryResults.error) {
+                        dispatch(deleteSimulationKey(simulationKey));
+                    }
+
+                    return queryResults;
                 }
                 catch (e) {
+                    console.error((e as Error).message);
+
+                    dispatch(setSimulationKeyComplete(simulationKey)); //reset global simulation flag to allow new simulations
+                    dispatch(deleteSimulationKey(simulationKey)); //delete this key since it is error
+
                     return {
-                        error: e instanceof Error ? e.message : e,
+                        error: (e as Error).message,
                     };
                 }
             },

@@ -21,22 +21,23 @@ export default function ClientPage() {
     const [currentTab, setCurrentTab] = useState(0);
 
     return (
-        <Box sx={{flexGrow:1}}>
-            <Tabs value={currentTab} onChange={(_ev: SyntheticEvent, newValue: number) => setCurrentTab(newValue)}>
-                <Tab label="Settings" id="tab-main" aria-controls="tabpanel-main"/>
-                {Object.keys(simulationKeys).filter((key) => simulationKeys[key] === true).map((key, idx) => {
-                    return <Tab key={JSON.stringify(key)} label={`Simulation Results #${idx+1}`} id={`tab-sim-${1+idx}`} aria-controls={`tabpanel-sim-${1+idx}`}/>;
-                })}
-            </Tabs>
-            <TabPanel currentTab={currentTab} thisTab={0}>
-                <SettingsPanel/>
-            </TabPanel>
-            {Object.keys(simulationKeys).map((key, idx) => {
-              return <TabPanel key={JSON.stringify(key)} currentTab={currentTab} thisTab={1+idx}>
-                <ResultsPanel simulationArgs={JSON.parse(key)}/>
-              </TabPanel>;
+      <Box sx={{width: '100vw'}}>
+        <Tabs value={currentTab} onChange={(_ev: SyntheticEvent, newValue: number) => setCurrentTab(newValue)}>
+            <Tab label="Settings" id="tab-main" aria-controls="tabpanel-main"/>
+            {Object.keys(simulationKeys).filter((key) => simulationKeys[key] === true).map((key, idx) => {
+                return <Tab key={JSON.stringify(key)} label={`Simulation Results #${idx+1}`} id={`tab-sim-${1+idx}`} aria-controls={`tabpanel-sim-${1+idx}`}/>;
             })}
+        </Tabs>
+        <Box sx={{flexGrow:1}}>
+          <TabPanel currentTab={currentTab} thisTab={0}>
+              <SettingsPanel/>
+          </TabPanel>
+          {Object.keys(simulationKeys).map((key, idx) => {
+            return <TabPanel key={JSON.stringify(key)} currentTab={currentTab} thisTab={1+idx}>
+              <ResultsPanel simulationKey={JSON.parse(key)}/>
+            </TabPanel>;
+          })}
         </Box>
-        
+      </Box>
     );
 }

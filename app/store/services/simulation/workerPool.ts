@@ -15,16 +15,18 @@ export const simulationWorkers = {
     run(args: SimulationArgs) {
         const worker = this._get();
 
-        return new Promise(resolve => {
+        return new Promise((resolve, reject) => {
             worker.postMessage(args);
 
-            worker.onmessage = (e:MessageEvent) => {
+            worker.onmessage = (e: MessageEvent) => {
                 this._workers.push(worker);
 
                 resolve(e.data);
             };
             worker.onerror = (e: ErrorEvent) => {
-                console.error(e);
+                console.error(e.message);
+
+                reject(e)
             };
         });
     },

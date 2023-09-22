@@ -1,6 +1,7 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react"
 import V3_MARKETS_LIST from "./utils/v3Markets";
 import { aaveFetchContractData } from "./web3/fetchAaveV3Data";
+import { ReserveMap } from "../slices/positionSlice";
 
 const BASE_URL = "https://aave-api-v2.aave.com/data";
 const HISTORY_ENDPOINT = "/rates-history";
@@ -43,8 +44,19 @@ export const aaveApi = createApi({
                     };
                 }
 
+                //filter out assets which aren't active
+                const reserveMapUnfiltered = result.data as ReserveMap;
+
                 return {
-                    data: result.data,
+                    data: Object.keys(reserveMapUnfiltered).reduce((filtered, key) => {
+                        const reserve = reserveMapUnfiltered[key];
+
+                        if (reserve.isActive && !reserve.isPaused && !reserve.isFrozen && !reserve.isIsolated && !reserve.isSiloedBorrowing && (reserve.usageAsCollateralEnabled || reserve.borrowingEnabled)) {
+                            filtered[key] = reserve;
+                        }
+
+                        return filtered;
+                    }, {} as ReserveMap),
                 };
             },
         })

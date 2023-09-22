@@ -51,9 +51,12 @@ export type SimulationResults = {
     snapshots?: SimulationSnapshot[],
 };
 
-class LiquidationError extends Error {};
-
-
+/**
+ * 
+ * @param args: SimulationArgs 
+ * @returns SimulationResults
+ * @throws
+ */
 export const doSimulate = (args: SimulationArgs): SimulationResults => {
     const {initialInvestment, maxLtv, leverage, positions, reserves, aprs} = args;
 
@@ -94,11 +97,15 @@ export const doSimulate = (args: SimulationArgs): SimulationResults => {
 
     //simulate for each day in the date interval
     //use the first symbol in our aprs object, this should be adequate
-    //@TODO stop somehow for arbitrary date range?
-    try {
-        const snapshots = Object.values(aprs)[0].map((aprData, idx) => {
+    const {snapshots, lastTime, liquidated} = Object.values(aprs)[0].reduce(({snapshots, lastTime, error, liquidated}, aprData, idx) => {
+        //stop processing if we hit an error or got liquidated
+        if (error || liquidated) {
+            return {snapshots, lastTime, error, liquidated};
+        }
+
+        try {
             const currentTimestamp = dayjs(new Date(aprData.x.year, aprData.x.month, aprData.x.date, aprData.x.hours)).unix();
-    
+
             const {newLongTotal, weightedThresholdSum}= Object.keys(longs).reduce((total, key) => {
                 //Add interest payment to supplied amount
                 //since this iteration is 24 hours, and compounding is per second,
@@ -126,6 +133,12 @@ export const doSimulate = (args: SimulationArgs): SimulationResults => {
                 return total;
             }, 0);
     
+            snapshots.push({
+                timestamp: currentTimestamp,
+                longTotal: newLongTotal,
+                shortTotal: newShortTotal,
+            });
+    
             //Check for liquidation
             if (weightedThresholdSum / newShortTotal < 1 + Number.EPSILON) {
                 //do a liquidation
@@ -133,34 +146,22 @@ export const doSimulate = (args: SimulationArgs): SimulationResults => {
                 
                 //we don't care what the penalty is,
                 //if our strategy results in a simulated liquidation it's almost certainly bad
-                throw new LiquidationError(String(currentTimestamp));
+                return {snapshots, lastTime: currentTimestamp, error, liquidated: true}; //set liquidated to prevent further processing
             }
-
-            return {
-                timestamp: currentTimestamp,
-                longTotal: newLongTotal,
-                shortTotal: newShortTotal,
-            };
-        });
-
-        
-        //Return results
-        return {
-            liquidated: false,
-            snapshots,
-        };
-    }
-    catch (e) {
-        if (e instanceof LiquidationError) {
-            //return with the liquidation timestamp
-            return {
-                liquidated: true,
-                timestamp: e.message,
-            };
-        } else {
-            //otherwise, some other unexpected error happened, let's throw it
-            //rethrow
-            throw e;
+    
+            return {snapshots, lastTime: currentTimestamp, error, liquidated};
         }
-    }
+        catch(e) {
+            //we hit an error
+            //use previous "lastTime" to disregard this timestemp and set the error value to prevent further processing
+            return {snapshots, lastTime, error: (e as Error).message, liquidated};
+        }
+        
+    }, {snapshots: [], lastTime: null, error: null, liquidated: false} as any);
+    
+    return {
+        liquidated,
+        timestamp: lastTime,
+        snapshots,
+    };
 }

@@ -5,7 +5,7 @@ import V3_MARKETS_LIST from '@/app/store/services/utils/v3Markets';
 import React from 'react';
 
 import { useAppDispatch, useAppSelector } from '../hooks';
-import { selectMarket, selectLeverage, setLeverage, selectInitialInvestment, setInitialInvestment, selectPositions, ReserveMap, selectFromDate, setFromDate, addSimulationKey, selectIsSimulationRunning, selectAvailableSupply, selectAvailableBorrow } from "@/app/store/slices/positionSlice";
+import { selectMarket, selectLeverage, setLeverage, selectInitialInvestment, setInitialInvestment, selectPositions, ReserveMap, selectFromDate, setFromDate, addSimulationKey, selectIsSimulationRunning, selectAvailableSupply, selectAvailableBorrow, SimulationKey } from "@/app/store/slices/positionSlice";
 import { useGetAaveContractDataQuery } from '../store/services/aaveApi';
 import { calculateMaxLeverage, calculateMaxLtv, calculateCurrentHealthFactor } from '../store/slices/utils/calculations';
 import { DatePicker } from '@mui/x-date-pickers';
@@ -39,12 +39,12 @@ export default function MarketToolbar() {
   const fromDate = useAppSelector(selectFromDate);
 
   const reservesData = useGetAaveContractDataQuery(marketKey);
-  const reservesMap = reservesData?.data;
+  const reserveMap = reservesData?.data;
   const positionMap = useAppSelector(selectPositions);
 
-  const maxLtv = calculateMaxLtv(positionMap, reservesMap as ReserveMap);
+  const maxLtv = calculateMaxLtv(positionMap, reserveMap as ReserveMap);
   const maxLeverage = calculateMaxLeverage(maxLtv);
-  const healthFactor = calculateCurrentHealthFactor(positionMap, reservesMap as ReserveMap, leverage);
+  const healthFactor = calculateCurrentHealthFactor(positionMap, reserveMap as ReserveMap, leverage);
 
   const isSimulationRunning = useAppSelector(selectIsSimulationRunning);
 
@@ -55,7 +55,7 @@ export default function MarketToolbar() {
     <GridToolbarContainer>
       <Box m={2} sx={{ flexGrow: 1 }}>
         <Grid container spacing={2}>
-          <Grid item xs={4}>
+          <Grid item xs={6} md={4}>
             <FormControl fullWidth>
               <InputLabel id="market-chain">Select V3 Market</InputLabel>
               <Select
@@ -72,7 +72,7 @@ export default function MarketToolbar() {
             </FormControl>
           </Grid>
           
-          <Grid item xs={4}>
+          <Grid item xs={6} md={4}>
             <TextField
               fullWidth
               label="Initial Investment (USD)"
@@ -85,8 +85,18 @@ export default function MarketToolbar() {
 
             />
           </Grid>
+
+          <Grid item xs={6} md={4}>
+            <DatePicker
+              label="From"
+              minDate={AAVE_ORIGINAL_LAUNCH_DATE} //Aave didn't exist before this date, so don't allow earlier dates
+              maxDate={dayjs()} //don't allow dates in the future, since we don't have any data to simulate for the future!
+              value={dayjs.unix(fromDate)}
+              onChange={(newValue) => dispatch(setFromDate(newValue?.unix()))}
+            />
+          </Grid>
           
-          <Grid item xs={4}>
+          <Grid item xs={6} md={4}>
             <Stack>
                 <Typography>Leverage</Typography>
                 <Slider
@@ -99,13 +109,12 @@ export default function MarketToolbar() {
                 />
             </Stack>
           </Grid>
-
           
-          <Grid item xs={4}>
+          <Grid item xs={6} md={4}>
             <TextField
               label="Health Factor"
               variant="standard"
-              value={healthFactor}
+              value={String(healthFactor)}
               InputProps={{readOnly:true}}
               sx={{ "& .MuiInputBase-input.Mui-disabled": {WebkitTextFillColor: getHealthFactorColor(healthFactor)}, }}
               disabled
@@ -113,29 +122,21 @@ export default function MarketToolbar() {
             />
           </Grid>
 
-          <Grid item xs={4}>
-            <DatePicker
-              label="From"
-              minDate={AAVE_ORIGINAL_LAUNCH_DATE} //Aave didn't exist before this date, so don't allow earlier dates
-              maxDate={dayjs()} //don't allow dates in the future, since we don't have any data to simulate for the future!
-              value={dayjs.unix(fromDate)}
-              onChange={(newValue) => dispatch(setFromDate(newValue?.unix()))}
-            />
-          </Grid>
           
-          <Grid item xs={4}>
-            <Tooltip title={availableSupply > 0 || availableBorrow > 0 ? "Supply and Borrow assets are not fully allocated" : ""}>
+          
+          <Grid item xs={6} md={4}>
+            <Tooltip title={availableSupply > 0 || availableBorrow > 0 ? "Supply and Borrow assets must be 100% allocated" : ""}>
               <span>
                 <Button
-                  onClick={()=>dispatch(addSimulationKey({ marketKey, initialInvestment, maxLtv, leverage, positionMap, reservesMap, fromDate, isComplete: false, }))}
+                  onClick={()=>dispatch(addSimulationKey({ marketKey, initialInvestment, maxLtv, leverage, positionMap, reserveMap, fromDate, isComplete: false, } as SimulationKey))}
                   variant="contained"
                   disabled={isSimulationRunning || availableSupply > 0 || availableBorrow > 0}
                 >
                   {
                     isSimulationRunning ?
-                      <CircularProgress/>
+                      <CircularProgress size="2em"/>
                       :
-                      <span>RUN{availableSupply > 0 || availableBorrow > 0 ? <WarningIcon/> : null}</span>
+                      <div style={{display:"flex", alignItems:"center"}}>RUN{availableSupply > 0 || availableBorrow > 0 ? <>&nbsp;<WarningIcon/></> : null}</div>
                   }
                 </Button>
               </span>

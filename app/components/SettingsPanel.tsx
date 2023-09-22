@@ -1,6 +1,6 @@
 "use client";
 
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridRenderEditCellParams } from '@mui/x-data-grid';
 import React from "react";
 import { useAppSelector } from '../hooks';
 import { selectMarket } from "@/app/store/slices/positionSlice";
@@ -9,6 +9,7 @@ import AllocationSlider from './AllocationSlider';
 import AnnouncementIcon from '@mui/icons-material/Announcement';
 import { Tooltip } from '@mui/material';
 import { useGetAaveContractDataQuery } from '../store/services/aaveApi';
+import { StakingYieldField } from './StakingYieldField';
 
 const formatPercentage = (n: number, decimalPlaces: number) => parseFloat((n*100).toFixed(decimalPlaces))+"%";
 
@@ -25,11 +26,11 @@ const cols : GridColDef[] = [
 
       return !canBorrow || !isCollateral
       ? <Tooltip title={title}>
-          <span className="table-cell-truncate">
+          <div className="table-cell-truncate" style={{display:"flex", alignItems:"center"}}>
             {params.value}
             &nbsp;
             <AnnouncementIcon/>
-          </span>
+          </div>
         </Tooltip>
       : <>{params.value}</>;
     },
@@ -42,7 +43,8 @@ const cols : GridColDef[] = [
   { field: "formattedReserveLiquidationThreshold", headerName: "Liquidation Threshold", valueFormatter: (params) => formatPercentage(Number(params.value), 2), },
   { field: "priceInUSD", headerName: "Price (USD)", valueFormatter: (params) => "$"+params.value, },
 
-  { field: "allocation", headerName: "Allocation", flex: 1, renderCell:(params)=><AllocationSlider symbol={params.row.symbol}/>, },
+  // { field: "yield", headerName: "Staking Yield", type: "number", editable: true, renderEditCell: (params: GridRenderEditCellParams) => <StakingYieldField symbol={params.row.symbol}/>},
+  { field: "allocation", headerName: "Allocation", flex: 1, renderCell:(params)=><AllocationSlider symbol={params.row.symbol} isCollateral={params.row.usageAsCollateralEnabled} isBorrowable={params.row.borrowingEnabled}/>, },
 ];
 
 export default function ClientPage() {

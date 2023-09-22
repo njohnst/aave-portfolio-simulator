@@ -2,7 +2,7 @@ import { Grid, Slider, Stack, Typography } from "@mui/material";
 import { useAppDispatch, useAppSelector } from '@/app/hooks';
 import { selectSupplyPctBySymbol, selectBorrowPctBySymbol, setSupplyPctBySymbol, setBorrowPctBySymbol, selectAvailableSupply, selectAvailableBorrow } from "@/app/store/slices/positionSlice";
 
-export default function AllocationSlider(props: {symbol: string}) {
+export default function AllocationSlider(props: {symbol: string, isCollateral: boolean, isBorrowable: boolean}) {
     const symbol = props.symbol;
 
     const dispatch = useAppDispatch();
@@ -25,6 +25,7 @@ export default function AllocationSlider(props: {symbol: string}) {
                         max={100}
                         valueLabelDisplay="auto"
                         size="small"
+                        disabled={!props.isCollateral}
                     />
                 </Stack>
             </Grid>
@@ -40,6 +41,7 @@ export default function AllocationSlider(props: {symbol: string}) {
                         max={100}
                         valueLabelDisplay="auto"
                         size="small"
+                        disabled={!props.isBorrowable}
                     />
                 </Stack>
             </Grid>
