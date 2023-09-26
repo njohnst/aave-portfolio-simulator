@@ -47,7 +47,7 @@ const cols : GridColDef[] = [
   { field: "allocation", headerName: "Allocation", flex: 1, renderCell:(params)=><AllocationSlider symbol={params.row.symbol} isCollateral={params.row.usageAsCollateralEnabled} isBorrowable={params.row.borrowingEnabled}/>, },
 ];
 
-export default function ClientPage() {
+export default function SettingsPanel() {
   const marketKey = useAppSelector(selectMarket);
   const reservesResult = useGetAaveContractDataQuery(marketKey);
 

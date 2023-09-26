@@ -28,6 +28,8 @@ export type SimulationKey = {
     reserveMap: ReserveMap,
 
     fromDate: number,
+    riskFreeRate: number,
+    swapFee: number,
 };
 
 export type SimulationKeyMap = {
@@ -47,8 +49,10 @@ export interface PositionState {
 
     from: number, //date from (for simulation)
 
-    simulationKeys: SimulationKeyMap, //cache keys for previously run simulations; store true/false for status of simulation completion
     isSimulationRunning: boolean,
+
+    riskFreeRate: number,
+    swapFee: number,
 };
 
 export const positionSlice = createSlice({
@@ -57,13 +61,14 @@ export const positionSlice = createSlice({
         market: DEFAULT_MARKET,
         reserves: {} as ReserveMap,
         initialInvestment: 1000,
-        leverage: 0,
+        leverage: 1,
         positions: {} as PositionMap,
         availableSupply: 100, //start at 100% and decrease
         availableBorrow: 100, //start at 100% and decrease
         from: dayjs().subtract(1, 'year').startOf('day').unix(),
-        simulationKeys: {} as SimulationKeyMap,
         isSimulationRunning: false,
+        riskFreeRate: 0.01, //1%
+        swapFee: 0.003, //0.3%
     } as PositionState,
     reducers: {
         setSupplyPctBySymbol(state, action: PayloadAction<[string, number]>) {
@@ -134,21 +139,29 @@ export const positionSlice = createSlice({
         setFromDate: (state, action) => {
             state.from = action.payload;
         },
-        addSimulationKey: (state, action) => {
-            state.simulationKeys[JSON.stringify(action.payload)] = false; //assume simulation not complete
-            state.isSimulationRunning = true;
+        setIsSimulationRunning: (state, action) => {
+            state.isSimulationRunning = action.payload;
         },
-        deleteSimulationKey: (state, action) => {
-            delete state.simulationKeys[JSON.stringify(action.payload)];
+        setRiskFreeRate: (state, action) => {
+            state.riskFreeRate = action.payload;
         },
-        setSimulationKeyComplete: (state, action) => {
-            state.simulationKeys[JSON.stringify(action.payload)] = true;
-            state.isSimulationRunning = false;
+        setSwapFee: (state, action) => {
+            state.swapFee = action.payload;
         },
     },
 });
 
-export const { setSupplyPctBySymbol, setBorrowPctBySymbol, setStakingAprBySymbol, setLeverage, setInitialInvestment, setFromDate, addSimulationKey, deleteSimulationKey, setSimulationKeyComplete } = positionSlice.actions;
+export const {
+    setSupplyPctBySymbol,
+    setBorrowPctBySymbol,
+    setStakingAprBySymbol,
+    setLeverage,
+    setInitialInvestment,
+    setFromDate,
+    setIsSimulationRunning,
+    setRiskFreeRate,
+    setSwapFee,
+} = positionSlice.actions;
 
 export const selectMarket = (state: RootState) => state.position.market;
 export const selectPositions = (state: RootState) => state.position.positions;
@@ -176,7 +189,9 @@ export const selectStakingAprBySymbol = (state: RootState, symbol: string) => {
 
 export const selectFromDate = (state: RootState) => state.position.from;
 
-export const selectSimulationKeys = (state: RootState) => state.position.simulationKeys;
 export const selectIsSimulationRunning = (state: RootState) => state.position.isSimulationRunning;
+
+export const selectRiskFreeRate = (state: RootState) => state.position.riskFreeRate;
+export const selectSwapFee = (state: RootState) => state.position.swapFee;
 
 export default positionSlice.reducer;

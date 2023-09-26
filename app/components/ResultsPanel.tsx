@@ -1,6 +1,6 @@
 import { LineChart, Line, ResponsiveContainer, Legend, Tooltip, XAxis, YAxis } from 'recharts';
 import { useGetSimulationResultQuery } from '../store/services/simulatorApi';
-import { SimulationResults } from '../store/services/simulation/simulator';
+import { SimulationResults, SimulationSnapshot } from '../store/services/simulation/simulator';
 import { Grid, Table, TableBody, TableCell, TableContainer, TableRow, useMediaQuery, useTheme } from '@mui/material';
 import { SimulationKey } from '../store/slices/positionSlice';
 import dayjs from 'dayjs';
@@ -22,7 +22,7 @@ const getTimestampAsDate = (timestamp: number) => dayjs.unix(timestamp).format("
 export default function ResultsPanel(props: { simulationKey: SimulationKey }) {
     const simResults = useGetSimulationResultQuery(props.simulationKey);
     const isSmallScreen = useMediaQuery(useTheme().breakpoints.down("md"));
-
+     
     if (!simResults.isSuccess) {
         return null;
     }
@@ -32,7 +32,7 @@ export default function ResultsPanel(props: { simulationKey: SimulationKey }) {
     const finalSnapshot = simResultsData && !simResultsData.liquidated && simResultsData?.snapshots?.at(-1);
     const finalValue = (finalSnapshot && (finalSnapshot.longTotal - finalSnapshot.shortTotal)) ?? 0;
 
-    const {marketKey, initialInvestment, leverage, positionMap, fromDate} = props.simulationKey;
+    const {marketKey, initialInvestment, leverage, positionMap, fromDate, riskFreeRate} = props.simulationKey;
 
     const {longs,shorts} = Object.keys(positionMap).reduce(({longs,shorts}, key) => {
         if (positionMap[key].supplyPct > 0) {
@@ -52,20 +52,25 @@ export default function ResultsPanel(props: { simulationKey: SimulationKey }) {
                         <TableBody>
                             <TableRow>
                                 <LabelThenVariable label="Market" value={marketKey} />
+                                <LabelThenVariable label="Risk Free Rate" value={(riskFreeRate*100)+"%"} />
+                            </TableRow>
+                            <TableRow>
                                 <LabelThenVariable label="Start Date" value={dayjs.unix(fromDate).toString()} />
+                                <LabelThenVariable label="End Date" value={dayjs.unix((finalSnapshot as SimulationSnapshot).timestamp).toString()} />
                             </TableRow>
                             <TableRow>
                                 <LabelThenVariable label="Initial Investment" value={`$${initialInvestment.toFixed(2)}`} />
                                 <LabelThenVariable label="Final Value" value={ !simResultsData.liquidated ? `$${(finalValue as number)?.toFixed(2)}` : "Liquidated!"} />
                             </TableRow>
                             <TableRow>
+                                <LabelThenVariable label="Leverage" value={leverage} />
+                                <LabelThenVariable label="Sharpe Ratio" value={!simResultsData.liquidated ? simResultsData.sharpeRatio : "N/A"} />
+                            </TableRow>
+                            <TableRow>
                                 <LabelThenVariable label="Initial Supply Distribution" value={longs.map(long => <p key={long.symbol}>{long.symbol}: {long.allocation}</p>)} />
                             </TableRow>
                             <TableRow>
                                 <LabelThenVariable label="Initial Borrow Distribution" value={shorts.map(short => <p key={short.symbol}>{short.symbol}: {short.allocation}</p>)} />
-                            </TableRow>
-                            <TableRow>
-                                <LabelThenVariable label="Leverage" value={leverage} />
                             </TableRow>
                         </TableBody>
                     </Table>

@@ -24,6 +24,7 @@ export default function AllocationSlider(props: {symbol: string, isCollateral: b
                         min={0}
                         max={100}
                         valueLabelDisplay="auto"
+                        valueLabelFormat={(value: number, _index: number) => value+"%"}
                         size="small"
                         disabled={!props.isCollateral}
                     />
@@ -40,6 +41,7 @@ export default function AllocationSlider(props: {symbol: string, isCollateral: b
                         min={0}
                         max={100}
                         valueLabelDisplay="auto"
+                        valueLabelFormat={(value: number, _index: number) => value+"%"}
                         size="small"
                         disabled={!props.isBorrowable}
                     />

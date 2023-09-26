@@ -1,13 +1,13 @@
 //Adapter / dummy API slice
 
-import { BaseQueryFn, createApi } from "@reduxjs/toolkit/query/react";
+import { BaseQueryFn, QueryStatus, createApi } from "@reduxjs/toolkit/query/react";
 import { AaveHistoryQuery, aaveApi } from "./aaveApi";
 import { AssetHistoryResponse, CGPriceQuery, coingeckoApi } from "./coingeckoApi";
 import { simulationWorkers } from "./simulation/workerPool";
 import { AprData, SimulationArgs, doSimulate } from "./simulation/simulator";
 import { RootState } from "..";
-import { ReserveMap, SimulationKey, deleteSimulationKey, setSimulationKeyComplete } from "../slices/positionSlice";
-import { ThunkDispatch } from "@reduxjs/toolkit";
+import { SimulationKey, setIsSimulationRunning } from "../slices/positionSlice";
+import { ThunkDispatch, createSelector } from "@reduxjs/toolkit";
 import dayjs from "dayjs";
 import V3_MARKETS_LIST from "./utils/v3Markets";
 
@@ -97,21 +97,36 @@ export const simulatorApi = createApi({
             queryFn: async (simulationKey: SimulationKey, { dispatch, getState }, _options, runSimulationQuery) => {
                 const state = getState() as RootState;
 
-                const { marketKey, initialInvestment, maxLtv, leverage, positionMap, reserveMap, fromDate } = simulationKey;
+                const { marketKey, initialInvestment, maxLtv, leverage, positionMap, reserveMap, fromDate, riskFreeRate, swapFee } = simulationKey;
 
                 try {
                     //input validation
-                    if  (
-                            initialInvestment <= 0
-                            || !(marketKey in V3_MARKETS_LIST) //market doesn't exist
-                            || maxLtv <= 0 //invalid LTV
-                            || leverage <= 0 //invalid leverage
-                            || !Object.keys(positionMap).length //no positions specified
-                            || Object.keys(reserveMap).length < Object.keys(positionMap).length //there are more positions than reserves, which means a reserve lookup will fail
-                            || !dayjs(fromDate).isValid() //invalid start date for simulation
-                        )
-                    {
-                        throw new Error("invalid arguments passed to simulation api");
+                    if  (initialInvestment <= 0) {
+                        throw new Error(`invalid initialInvestment (${initialInvestment}) passed to simulation api`);
+                    }
+
+                    if (!(marketKey in V3_MARKETS_LIST)) { //market doesn't exist
+                        throw new Error(`invalid marketKey (${marketKey}) passed to simulation api`);
+                    }
+                    
+                    if (maxLtv <= 0) { //invalid LTV
+                        throw new Error(`invalid maxLtv (${maxLtv}) passed to simulation api`);
+                    }
+                    
+                    if (leverage <= 0) { //invalid leverage
+                        throw new Error(`invalid leverage (${leverage}) passed to simulation api`);
+                    }
+
+                    if (!Object.keys(positionMap).length) { //no positions specified
+                        throw new Error(`invalid positionMap, no positions specified to simulation api`);
+                    }
+
+                    if (Object.keys(reserveMap).length < Object.keys(positionMap).length) { //there are more positions than reserves, which means a reserve lookup will fail
+                        throw new Error(`invalid reserveMap, less reserves than positions (reserve lookup will fail) passed to simulation api`);
+                    }
+
+                    if (!dayjs(fromDate).isValid()) { //invalid start date for simulation
+                        throw new Error(`invalid startDate (${fromDate}) passed to simulation api`);
                     }
 
                     //get the list of coingecko tokens
@@ -145,25 +160,21 @@ export const simulatorApi = createApi({
                         reserves: reserveMap,
                         aprs,
                         prices,
+                        riskFreeRate,
+                        swapFee,
                     };
 
                     const queryResults = await runSimulationQuery(args);
 
                     //tell the results panel that simulation is complete and make it visible
-                    dispatch(setSimulationKeyComplete(simulationKey));
-
-                    //if we encountered an error, delete that panel
-                    if (queryResults.error) {
-                        dispatch(deleteSimulationKey(simulationKey));
-                    }
+                    dispatch(setIsSimulationRunning(false));
 
                     return queryResults;
                 }
                 catch (e) {
                     console.error((e as Error).message);
 
-                    dispatch(setSimulationKeyComplete(simulationKey)); //reset global simulation flag to allow new simulations
-                    dispatch(deleteSimulationKey(simulationKey)); //delete this key since it is error
+                    dispatch(setIsSimulationRunning(false)); //set running to false to allow new simulations
 
                     return {
                         error: (e as Error).message,
@@ -175,3 +186,19 @@ export const simulatorApi = createApi({
 });
 
 export const { useGetSimulationResultQuery } = simulatorApi;
+
+
+//begin hack section
+//select simulator API state
+//(for createSelector/memoization)
+const selectSimulatorApiState = (state: RootState) => {
+    return state['api/simulator'];
+};
+
+//return the current queryCacheKeys and their results
+export const selectSimulationApiQueries = createSelector([selectSimulatorApiState], (simApiState) => {
+    return Object.entries(simApiState.queries).filter(([key, entry]) => {
+        //filter out rejected queries and any query which is not "getSimulationResult" (vacuous because that's the only one on this API currently...)
+        return key.startsWith("getSimulationResult(") && entry?.status !== QueryStatus.rejected;
+    });
+});
