@@ -15,11 +15,12 @@ then simulate that portfolio on the given timescale (from DATE until now; defaul
 * No EMODE
 * Frozen, paused, siloed and inactive assets are filtered out
 * Hardcoded list of markets / chain IDs
-* Includes staking yields for liquid staking tokens (TODO)
-* Includes incentives yields (TODO)
-* Estimates swap fees (TODO)
-* No advanced forecasting, just "use current rate for X time" or "use past X time of rates" (TODO, only uses past X time rates)
+* Includes staking yields for liquid staking tokens
+* Does not include incentive yields (very few chains / assets offering incentives at this time...)
+* Estimates swap fees
+* No advanced forecasting, just "use past X time of rates"
 * No computation of effect of position size on market or consideration for the available liquidity
+* @@TODO missing timestamps are not handled correctly in the current implementation!
 
 # Details
 

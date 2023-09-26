@@ -11,7 +11,8 @@ import { calculateMaxLeverage, calculateMaxLtv, calculateCurrentHealthFactor } f
 import { DatePicker } from '@mui/x-date-pickers';
 import dayjs from 'dayjs';
 import WarningIcon from '@mui/icons-material/Warning';
-import InfoIcon from '@mui/icons-material/Info';
+import { TooltipLabel } from './TooltipLabel';
+
 import { simulatorApi } from '../store/services/simulatorApi';
 
 const LEVERAGE_STEP_SIZE = 0.01;
@@ -29,15 +30,6 @@ const getHealthFactorColor = (healthFactor: number) => {
   } else {
     return 'green'; //safe
   }
-};
-
-const LabelWithInfoTooltip = (props: {label: string, tooltip: string}) => {
-  return <Tooltip title={props.tooltip}>
-    <div style={{display:"flex", alignItems:"center"}}>
-      {props.label}
-      <InfoIcon/>
-    </div>
-  </Tooltip>;
 };
 
 const INITIAL_INVESTMENT_TOOLTIP = `The total value of the initial position in US dollars.
@@ -101,7 +93,7 @@ export default function MarketToolbar() {
           <Grid item xs={6} md={4}>
             <TextField
               fullWidth
-              label={<LabelWithInfoTooltip label="Initial Investment" tooltip={INITIAL_INVESTMENT_TOOLTIP}/>}
+              label={<TooltipLabel label="Initial Investment" tooltip={INITIAL_INVESTMENT_TOOLTIP}/>}
               value={initialInvestment}
               type="number"
               InputProps={{
@@ -116,7 +108,7 @@ export default function MarketToolbar() {
               <Grid item xs={6}>
                 <TextField
                   fullWidth
-                  label={<LabelWithInfoTooltip label="Estimated Swap Fees" tooltip={SWAP_FEE_TOOLTIP}/>}
+                  label={<TooltipLabel label="Estimated Swap Fees" tooltip={SWAP_FEE_TOOLTIP}/>}
                   value={Number((swapFee*100).toFixed(2))}
                   type="number"
                   InputProps={{
@@ -129,7 +121,7 @@ export default function MarketToolbar() {
               <Grid item xs={6}>
                 <TextField
                   fullWidth
-                  label={<LabelWithInfoTooltip label="Risk Free Rate" tooltip={RISK_FREE_RATE_TOOLTIP}/>}
+                  label={<TooltipLabel label="Risk Free Rate" tooltip={RISK_FREE_RATE_TOOLTIP}/>}
                   value={Number((riskFreeRate*100).toFixed(2))}
                   type="number"
                   InputProps={{
@@ -144,7 +136,7 @@ export default function MarketToolbar() {
           
           <Grid item xs={6} md={4}>
             <Stack>
-                <Typography component={"span"}><LabelWithInfoTooltip label="Leverage" tooltip={LEVERAGE_TOOLTIP}/></Typography>
+                <Typography component={"span"}><TooltipLabel label="Leverage" tooltip={LEVERAGE_TOOLTIP}/></Typography>
                 <Slider
                   value={leverage || 1}
                   onChange={(ev: Event, value: number | number[]) => dispatch(setLeverage(value as number))}
@@ -164,7 +156,7 @@ export default function MarketToolbar() {
               InputProps={{readOnly:true}}
               sx={{ "& .MuiInputBase-input.Mui-disabled": {WebkitTextFillColor: getHealthFactorColor(healthFactor)}, }}
               disabled
-              helperText="Bigger value is safer, will be liquidated if health factor <= 1"
+              helperText="Safest = NaN (no borrowing). Larger values are safer, smaller values are riskier. Position will be liquidated if health factor < 1"
             />
           </Grid>
 
@@ -174,7 +166,7 @@ export default function MarketToolbar() {
             <Grid container spacing={2}>
               <Grid item xs={6}>
                 <DatePicker
-                  label={<LabelWithInfoTooltip label="From" tooltip={FROM_TOOLTIP}/>}
+                  label={<TooltipLabel label="From" tooltip={FROM_TOOLTIP}/>}
                   minDate={AAVE_ORIGINAL_LAUNCH_DATE} //Aave didn't exist before this date, so don't allow earlier dates
                   maxDate={dayjs()} //don't allow dates in the future, since we don't have any data to simulate for the future!
                   value={dayjs.unix(fromDate)}
@@ -182,12 +174,12 @@ export default function MarketToolbar() {
                 />
               </Grid>
               <Grid item xs={6}>
-                <Tooltip title={availableSupply > 0 || availableBorrow > 0 ? "Supply and Borrow assets must be 100% allocated" : ""}>
+                <Tooltip title={availableSupply > 0 || availableBorrow > 0
+                  ? "Supply and Borrow assets must be 100% allocated"
+                  : "Will call 3rd party APIs to estimate the past performance of the selected portfolio from the listed date until today. The results will be displayed in a new tab. Nothing will happen if a simulation results tab already exists for the currently selected parameters."}>
                   <span>
                     <Button
                       onClick={()=>{
-                        dispatch(setIsSimulationRunning(true)); //make sure we know that a simulation is running so we can display a loading spinner and prevent running more simulations
-
                         dispatch(
                           simulatorApi.endpoints.getSimulationResult.initiate({ 
                             marketKey,

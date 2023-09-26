@@ -75,13 +75,13 @@ export const doSimulate = (args: SimulationArgs): SimulationResults => {
 
             const initialPrice = prices[0][1]; //@TODO
             
-            longs[symbol] = { size: (initialInvestment * leverageAfterSwapFees * positions[symbol].supplyPct / 100) / initialPrice, prices, };
+            longs[symbol] = { size: (initialInvestment * leverageAfterSwapFees * positions[symbol].supplyPct / 100) / initialPrice, prices, stakingApr: positions[symbol].stakingApr, };
         } else {
             throw new Error("asset not found in reserves");
         }
 
         return longs;
-    }, {} as {[k: string]: {size: number, prices: Array<any>, }}); //@TODO Type
+    }, {} as {[k: string]: {size: number, prices: Array<any>, stakingApr: number,}}); //@TODO Type
 
 
     const shorts = Object.keys(positions).filter(key => positions[key].borrowPct > 0).reduce((shorts, symbol) => {
@@ -92,13 +92,13 @@ export const doSimulate = (args: SimulationArgs): SimulationResults => {
 
             const initialPrice = prices[0][1]; //@TODO
 
-            shorts[symbol] = { size: (initialInvestment * (leverage - 1) * positions[symbol].borrowPct / 100) / initialPrice, prices, };
+            shorts[symbol] = { size: (initialInvestment * (leverage - 1) * positions[symbol].borrowPct / 100) / initialPrice, prices, stakingApr: positions[symbol].stakingApr, };
         } else {
             throw new Error("asset not found in reserves");
         }
 
         return shorts;
-    }, {} as {[k: string]: {size: number, prices: Array<any>, }}); //@TODO type
+    }, {} as {[k: string]: {size: number, prices: Array<any>, stakingApr: number, }}); //@TODO type
 
     //simulate for each day in the date interval
     //use the first symbol in our aprs object, this should be adequate
@@ -116,6 +116,13 @@ export const doSimulate = (args: SimulationArgs): SimulationResults => {
                 //since this iteration is 24 hours, and compounding is per second,
                 //compound 60s * 60minutes * 24 = 86400 times
                 longs[key].size *= (1+getRatePerSecond(aprs[key][idx].liquidityRate_avg))**COMPOUNDING_BY_SECOND_FOR_ONE_DAY;
+
+                //add staking yield as well!
+                //we are just defaulting to daily compounding, this is not necessarily correct, but should be relatively close in most cases...
+                //just divide APR by 365!
+                if (longs[key].stakingApr > 0) {
+                    longs[key].size *= (1+longs[key].stakingApr/365);
+                }
     
                 const price = longs[key].prices[idx][1];
                 const prevPrice = idx > 0 ? longs[key].prices[idx-1][1] : price;
@@ -124,7 +131,7 @@ export const doSimulate = (args: SimulationArgs): SimulationResults => {
                 total.weightedThresholdSum += longs[key].size * price * Number(reserves[key].formattedReserveLiquidationThreshold);
                 
                 //@TODO
-                const returnAmount = ((price-prevPrice)+(getRatePerSecond(aprs[key][idx].liquidityRate_avg))**COMPOUNDING_BY_SECOND_FOR_ONE_DAY)/prevPrice;
+                const returnAmount = ((price-prevPrice)+(getRatePerSecond(aprs[key][idx].liquidityRate_avg))**COMPOUNDING_BY_SECOND_FOR_ONE_DAY + longs[key].stakingApr/365)/prevPrice;
                 
                 if (!longSums[key]) {
                     longSums[key] = {
@@ -144,13 +151,20 @@ export const doSimulate = (args: SimulationArgs): SimulationResults => {
                 //compound 60s * 60minutes * 24 = 86400 times
                 shorts[key].size *= (1+getRatePerSecond(aprs[key][idx].variableBorrowRate_avg))**COMPOUNDING_BY_SECOND_FOR_ONE_DAY;
     
+                //add staking yield as well!
+                //we are just defaulting to daily compounding, this is not necessarily correct, but should be relatively close in most cases...
+                //just divide APR by 365!
+                if (shorts[key].stakingApr > 0) {
+                    shorts[key].size *= (1+shorts[key].stakingApr/365);
+                }
+
                 const price = shorts[key].prices[idx][1];
                 const prevPrice = idx > 0 ? shorts[key].prices[idx-1][1] : price;
     
                 total += shorts[key].size * price;
 
                 //@TODO
-                const returnAmount = ((prevPrice-price)-(getRatePerSecond(aprs[key][idx].variableBorrowRate_avg))**COMPOUNDING_BY_SECOND_FOR_ONE_DAY)/prevPrice;
+                const returnAmount = ((prevPrice-price)-(getRatePerSecond(aprs[key][idx].variableBorrowRate_avg))**COMPOUNDING_BY_SECOND_FOR_ONE_DAY + shorts[key].stakingApr/365)/prevPrice;
 
                 if (!shortSums[key]) {
                     shortSums[key] = {

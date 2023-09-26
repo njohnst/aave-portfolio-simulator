@@ -10,10 +10,19 @@ export const StakingYieldField = (props: {symbol: string}) => {
     return <TextField
         type="number"
         InputProps={{
+            inputProps: { step: 0.1 },
             endAdornment: <InputAdornment position="end">%</InputAdornment>
         }}
         value={(100*stakingYield)}
         onChange={(ev: React.ChangeEvent<HTMLInputElement>) => dispatch(setStakingAprBySymbol([props.symbol, Number(ev.target.value) / 100]))}
-        
+        fullWidth
+        sx={{
+            "& input[type=number]": {
+                MozAppearance: "textfield",
+            },
+            "& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button": {
+                display: "none",
+            },
+        }}
     />;
 };

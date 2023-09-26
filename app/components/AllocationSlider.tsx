@@ -15,7 +15,7 @@ export default function AllocationSlider(props: {symbol: string, isCollateral: b
 
     return (
         <Grid container justifyContent="center" spacing={2}>
-            <Grid item xs={6}>
+            <Grid item xs={12} md={6}>
                 <Stack>
                     <Typography>Supply</Typography>
                     <Slider
@@ -30,7 +30,7 @@ export default function AllocationSlider(props: {symbol: string, isCollateral: b
                     />
                 </Stack>
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} md={6}>
                 <Stack>
                     <Typography>Borrow</Typography>
                     <Slider

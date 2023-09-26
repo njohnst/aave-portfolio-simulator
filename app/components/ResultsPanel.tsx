@@ -36,13 +36,13 @@ export default function ResultsPanel(props: { simulationKey: SimulationKey }) {
 
     const {longs,shorts} = Object.keys(positionMap).reduce(({longs,shorts}, key) => {
         if (positionMap[key].supplyPct > 0) {
-            longs.push({symbol: key, allocation: (positionMap[key].supplyPct).toFixed(2) + "%"});
+            longs.push({symbol: key, allocation: (positionMap[key].supplyPct).toFixed(2) + "%", stakingApr: positionMap[key].stakingApr,});
         }
         if (positionMap[key].borrowPct > 0) {
-            shorts.push({symbol: key, allocation: (positionMap[key].borrowPct).toFixed(2) + "%"});
+            shorts.push({symbol: key, allocation: (positionMap[key].borrowPct).toFixed(2) + "%", stakingApr: positionMap[key].stakingApr,});
         }
         return {longs, shorts};
-    }, {longs: [] as {symbol:string, allocation: string}[], shorts: [] as {symbol:string, allocation:string}[]})
+    }, {longs: [] as {symbol:string, allocation: string, stakingApr: number,}[], shorts: [] as {symbol:string, allocation:string, stakingApr: number,}[]})
 
     return (
         <Grid container spacing={2} sx={{width: '100vw'}}>
@@ -55,8 +55,8 @@ export default function ResultsPanel(props: { simulationKey: SimulationKey }) {
                                 <LabelThenVariable label="Risk Free Rate" value={(riskFreeRate*100)+"%"} />
                             </TableRow>
                             <TableRow>
-                                <LabelThenVariable label="Start Date" value={dayjs.unix(fromDate).toString()} />
-                                <LabelThenVariable label="End Date" value={dayjs.unix((finalSnapshot as SimulationSnapshot).timestamp).toString()} />
+                                <LabelThenVariable label="Start Date" value={dayjs.unix(fromDate).format("ddd, DD MMM YYYY")} />
+                                <LabelThenVariable label="End Date" value={dayjs.unix((finalSnapshot as SimulationSnapshot).timestamp).format("ddd, DD MMM YYYY")} />
                             </TableRow>
                             <TableRow>
                                 <LabelThenVariable label="Initial Investment" value={`$${initialInvestment.toFixed(2)}`} />
@@ -67,10 +67,14 @@ export default function ResultsPanel(props: { simulationKey: SimulationKey }) {
                                 <LabelThenVariable label="Sharpe Ratio" value={!simResultsData.liquidated ? simResultsData.sharpeRatio : "N/A"} />
                             </TableRow>
                             <TableRow>
-                                <LabelThenVariable label="Initial Supply Distribution" value={longs.map(long => <p key={long.symbol}>{long.symbol}: {long.allocation}</p>)} />
+                                <LabelThenVariable label="Initial Supply Distribution" value={
+                                    longs.map(long => <p key={long.symbol}>{long.stakingApr > 0 ? `${long.symbol} (@ ${(100*long.stakingApr).toFixed(2)}% staking APR)` : long.symbol}: {long.allocation}</p>)
+                                } />
                             </TableRow>
                             <TableRow>
-                                <LabelThenVariable label="Initial Borrow Distribution" value={shorts.map(short => <p key={short.symbol}>{short.symbol}: {short.allocation}</p>)} />
+                                <LabelThenVariable label="Initial Borrow Distribution" value={
+                                    shorts.map(short => <p key={short.symbol}>{short.stakingApr > 0 ? `${short.symbol} (@ ${(100*short.stakingApr).toFixed(2)}% staking APR)` : short.symbol}: {short.allocation}</p>)
+                                } />
                             </TableRow>
                         </TableBody>
                     </Table>

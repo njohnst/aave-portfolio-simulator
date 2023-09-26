@@ -2,6 +2,7 @@ import { PayloadAction, createSlice } from '@reduxjs/toolkit';
 import { RootState } from '..';
 import { ReservesData } from '../services/web3/fetchAaveV3Data';
 import dayjs from 'dayjs';
+import { simulatorApi } from '../services/simulatorApi';
 
 const DEFAULT_MARKET : string = "polygonV3";
 
@@ -148,6 +149,14 @@ export const positionSlice = createSlice({
         setSwapFee: (state, action) => {
             state.swapFee = action.payload;
         },
+    },
+    extraReducers: (builder) => {
+        builder.addMatcher(
+            simulatorApi.endpoints.getSimulationResult.matchPending,
+            (state, _action) => {
+                state.isSimulationRunning = true; //set simulation running! enable UI to display loading spinner, etc...
+            }
+        );
     },
 });
 
