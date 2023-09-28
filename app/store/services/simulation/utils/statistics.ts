@@ -11,6 +11,7 @@ export type PositionMapSums = {
     },
 };
 
+//@TODO refactor this (api is bad, it assumes too much about the inputs, making testing/verification difficult...)
 export function calculateDailyStdDevsAnnualized(positionReturns: PositionMapSums) {
     return Object.keys(positionReturns).reduce((stdDevMap, key) => {
         const nReturns = positionReturns[key].returns.length;
@@ -26,7 +27,7 @@ export function calculateDailyStdDevsAnnualized(positionReturns: PositionMapSums
 }
 
 /**
- * Calculate std dev of multi asset portfolio
+ * Calculate std dev of multi asset portfolio (sample std deviation)
  * @param positionStats
  */
 
