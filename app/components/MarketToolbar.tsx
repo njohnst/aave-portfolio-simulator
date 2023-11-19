@@ -5,7 +5,7 @@ import V3_MARKETS_LIST from '@/app/store/services/utils/v3Markets';
 import React from 'react';
 
 import { useAppDispatch, useAppSelector } from '../hooks';
-import { selectMarket, selectLeverage, setLeverage, selectInitialInvestment, setInitialInvestment, selectPositions, ReserveMap, selectFromDate, setFromDate, selectIsSimulationRunning, selectAvailableSupply, selectAvailableBorrow, SimulationKey, selectRiskFreeRate, setRiskFreeRate, selectSwapFee, setSwapFee, setIsSimulationRunning } from "@/app/store/slices/positionSlice";
+import { selectMarket, setMarket, selectLeverage, setLeverage, selectInitialInvestment, setInitialInvestment, selectPositions, ReserveMap, selectFromDate, setFromDate, selectIsSimulationRunning, selectAvailableSupply, selectAvailableBorrow, SimulationKey, selectRiskFreeRate, setRiskFreeRate, selectSwapFee, setSwapFee, setIsSimulationRunning } from "@/app/store/slices/positionSlice";
 import { useGetAaveContractDataQuery } from '../store/services/aaveApi';
 import { calculateMaxLeverage, calculateMaxLtv, calculateCurrentHealthFactor } from '../store/slices/utils/calculations';
 import { DatePicker } from '@mui/x-date-pickers';
@@ -80,6 +80,7 @@ export default function MarketToolbar() {
                 labelId="market-chain"
                 id="market-chain-select"
                 value={marketKey}
+                onChange={(ev) => dispatch(setMarket(ev.target.value))}
                 label="Chain ID"
               >
                 {Object.keys(V3_MARKETS_LIST).map((k : string) => {

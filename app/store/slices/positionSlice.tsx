@@ -3,6 +3,7 @@ import { RootState } from '..';
 import { ReservesData } from '../services/web3/fetchAaveV3Data';
 import dayjs from 'dayjs';
 import { simulatorApi } from '../services/simulatorApi';
+import V3_MARKETS_LIST from '../services/utils/v3Markets';
 
 const DEFAULT_MARKET : string = "polygonV3";
 
@@ -72,6 +73,12 @@ export const positionSlice = createSlice({
         swapFee: 0.003, //0.3%
     } as PositionState,
     reducers: {
+        setMarket(state, action: PayloadAction<string>) {
+            //Make sure market key exists
+            if (Object.keys(V3_MARKETS_LIST).includes(action.payload)){
+                state.market = action.payload;
+            }
+        },
         setSupplyPctBySymbol(state, action: PayloadAction<[string, number]>) {
             //Check if the key exists
             if (!state.positions[action.payload[0]]) {
@@ -161,6 +168,7 @@ export const positionSlice = createSlice({
 });
 
 export const {
+    setMarket,
     setSupplyPctBySymbol,
     setBorrowPctBySymbol,
     setStakingAprBySymbol,
